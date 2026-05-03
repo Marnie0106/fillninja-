@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from autogen.beta import Agent, PromptedSchema
 
+from server.json_util import strip_markdown_json_fence
 from server.llm import build_llm_config
 
 try:
@@ -23,7 +24,7 @@ You receive the user's goal (scholarships, grants, surveys, job applications, pr
 Pick distinct HTTPS pages where someone would realistically complete an application, registration, survey, or intake form.
 Avoid: generic homepages with no form path, pure news, social timelines, obvious junk. Prefer .edu, foundations, company career portals, government forms when relevant.
 
-Each item must include fill_task: a concrete instruction for the Fill agents (e.g. fill visible fields with plausible demo data and the user's stated intent; do not submit if the user asked for dry-run).
+Each item must include fill_task: a short high-level instruction for the Fill agents (what to accomplish on this page). Concrete personal field values are appended automatically when the user supplied a document or project URL. Prefer: complete the application using user-provided facts; do not submit if the user asked for dry-run.
 
 Return one JSON object only: no markdown, no code fences, no text before or after."""
 
@@ -41,24 +42,6 @@ class DiscoveredForm(BaseModel):
 class DiscoveryResult(BaseModel):
     summary: str = ""
     forms: list[DiscoveredForm] = Field(default_factory=list)
-
-
-def _strip_json_markdown_fence(text: str) -> str:
-    s = text.strip()
-    start = s.find("```")
-    if start < 0:
-        return s
-    fragment = s[start:]
-    lines = fragment.splitlines()
-    if not lines:
-        return s
-    body: list[str] = []
-    for line in lines[1:]:
-        if line.strip() == "```":
-            break
-        body.append(line)
-    inner = "\n".join(body).strip()
-    return inner if inner else s
 
 
 def resolve_search_backend() -> Literal["tavily", "ddgs"]:
@@ -84,11 +67,31 @@ def discovery_search_health_detail() -> dict[str, str]:
 
 def _discovery_queries(objective: str) -> list[str]:
     o = objective.strip()
+    if not o:
+        o = "research grants fellowships scholarships application"
     return [
         f"{o} apply online application",
         f"{o} application form register",
         f"{o} scholarship grant fellowship apply",
     ]
+
+
+def merged_search_queries(objective: str, extra: list[str] | None, max_queries: int = 6) -> list[str]:
+    """Combine templated objective queries with optional model-suggested phrases (deduplicated)."""
+    base = _discovery_queries(objective)
+    if not extra:
+        return base[:max_queries]
+    seen: set[str] = {q.casefold() for q in base}
+    out = list(base)
+    for raw in extra:
+        q = (raw or "").strip()
+        if not q or q.casefold() in seen:
+            continue
+        seen.add(q.casefold())
+        out.append(q)
+        if len(out) >= max_queries:
+            break
+    return out
 
 
 def _format_snippet_chunks(chunks: list[str]) -> str:
@@ -100,8 +103,7 @@ def _format_snippet_chunks(chunks: list[str]) -> str:
     return text
 
 
-def collect_search_snippets_ddgs(objective: str, max_per_query: int = 8) -> str:
-    queries = _discovery_queries(objective)
+def collect_search_snippets_ddgs(queries: list[str], max_per_query: int = 8) -> str:
     chunks: list[str] = []
     seen_urls: set[str] = set()
     with DDGS() as ddgs:
@@ -146,7 +148,7 @@ def _tavily_results_list(resp: Any) -> list[dict[str, Any]]:
     return out
 
 
-async def collect_search_snippets_tavily(objective: str, max_per_query: int = 8) -> str:
+async def collect_search_snippets_tavily(queries: list[str], max_per_query: int = 8) -> str:
     if AsyncTavilyClient is None:
         raise RuntimeError(
             "Tavily search requires the tavily-python package. Install dependencies (pip install -r requirements.txt)."
@@ -156,7 +158,6 @@ async def collect_search_snippets_tavily(objective: str, max_per_query: int = 8)
         raise RuntimeError("TAVILY_API_KEY is not set")
 
     client = AsyncTavilyClient(api_key)
-    queries = _discovery_queries(objective)
     chunks: list[str] = []
     seen_urls: set[str] = set()
     per_query = min(max(max_per_query, 1), 20)
@@ -189,11 +190,11 @@ async def collect_search_snippets_tavily(objective: str, max_per_query: int = 8)
     return _format_snippet_chunks(chunks)
 
 
-async def collect_search_snippets(objective: str, max_per_query: int = 8) -> str:
+async def collect_search_snippets(queries: list[str], max_per_query: int = 8) -> str:
     backend = resolve_search_backend()
     if backend == "tavily":
-        return await collect_search_snippets_tavily(objective, max_per_query)
-    return await asyncio.to_thread(collect_search_snippets_ddgs, objective, max_per_query)
+        return await collect_search_snippets_tavily(queries, max_per_query)
+    return await asyncio.to_thread(collect_search_snippets_ddgs, queries, max_per_query)
 
 
 def build_curator_agent(config: Any) -> Agent:
@@ -205,7 +206,11 @@ def build_curator_agent(config: Any) -> Agent:
     )
 
 
-async def run_discovery(objective: str, max_forms: int) -> DiscoveryResult:
+async def run_discovery(
+    objective: str,
+    max_forms: int,
+    extra_search_queries: list[str] | None = None,
+) -> DiscoveryResult:
     if max_forms < 1:
         max_forms = 1
     max_forms = min(max_forms, 20)
@@ -219,7 +224,8 @@ async def run_discovery(objective: str, max_forms: int) -> DiscoveryResult:
                 "Tavily search requires tavily-python. Install dependencies (pip install -r requirements.txt)."
             )
 
-    snippets = await collect_search_snippets(objective.strip())
+    queries = merged_search_queries(objective.strip(), extra_search_queries)
+    snippets = await collect_search_snippets(queries)
     config = build_llm_config()
     curator = build_curator_agent(config)
     user_msg = (
@@ -235,7 +241,7 @@ async def run_discovery(objective: str, max_forms: int) -> DiscoveryResult:
         if raw is None or not raw.strip():
             raise
         try:
-            parsed = DiscoveryResult.model_validate_json(_strip_json_markdown_fence(raw))
+            parsed = DiscoveryResult.model_validate_json(strip_markdown_json_fence(raw))
         except ValidationError:
             parsed = DiscoveryResult.model_validate_json(raw.strip())
     if parsed is None:

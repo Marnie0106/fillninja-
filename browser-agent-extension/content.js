@@ -4,6 +4,7 @@
 class PageInteractor {
     constructor() {
         this.highlightedElements = [];
+        this.unfilledHighlightEntries = [];
         this.observers = new Map();
     }
 
@@ -79,8 +80,14 @@ class PageInteractor {
         })).filter(l => l.text || l.title);
     }
 
+    _buttonElements() {
+        return document.querySelectorAll(
+            'button, input[type="button"], input[type="submit"], [role="button"]'
+        );
+    }
+
     getButtons() {
-        return Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"], [role="button"]')).map((btn, index) => ({
+        return Array.from(this._buttonElements()).map((btn, index) => ({
             index,
             tag: btn.tagName.toLowerCase(),
             type: btn.type || null,
@@ -172,7 +179,8 @@ class PageInteractor {
         let element;
 
         if (typeof selectorOrIndex === 'number') {
-            const elements = document.querySelectorAll(type === 'button' ? 'button, [role="button"]' : 'a');
+            const elements =
+                type === 'button' ? this._buttonElements() : document.querySelectorAll('a[href]');
             element = elements[selectorOrIndex];
         } else {
             element = document.querySelector(selectorOrIndex);
@@ -332,6 +340,179 @@ class PageInteractor {
         this.highlightedElements = [];
     }
 
+    _cssEscapeForSelector(value) {
+        if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+            return CSS.escape(value);
+        }
+        return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
+    isFillableFormControl(el) {
+        if (!el || el.disabled) {
+            return false;
+        }
+        const tag = el.tagName.toLowerCase();
+        if (tag === 'input') {
+            const t = (el.type || 'text').toLowerCase();
+            if (['hidden', 'button', 'submit', 'reset', 'image'].includes(t)) {
+                return false;
+            }
+            return true;
+        }
+        if (tag === 'textarea' || tag === 'select') {
+            return true;
+        }
+        return el.matches && el.matches('[contenteditable="true"]');
+    }
+
+    agreementLikeCheckbox(el) {
+        if ((el.type || '').toLowerCase() !== 'checkbox') {
+            return false;
+        }
+        const lab = (this.getFieldLabel(el) || '').toLowerCase();
+        return /agree|accept|terms|conditions|consent|confirm|acknowledge/.test(lab);
+    }
+
+    collectFillableElements(maxCount) {
+        const sel = 'input, textarea, select, [contenteditable="true"]';
+        const seen = new Set();
+        const out = [];
+        const nodes = document.querySelectorAll(sel);
+        for (let i = 0; i < nodes.length && out.length < maxCount; i++) {
+            const el = nodes[i];
+            if (seen.has(el)) {
+                continue;
+            }
+            if (!this.isFillableFormControl(el) || !this.isElementVisible(el)) {
+                continue;
+            }
+            seen.add(el);
+            out.push(el);
+        }
+        return out;
+    }
+
+    shouldRemindAsUnfilled(el, radioGroupReported) {
+        const tag = el.tagName.toLowerCase();
+        if (tag === 'input') {
+            const t = (el.type || 'text').toLowerCase();
+            if (t === 'checkbox') {
+                if (el.checked) {
+                    return false;
+                }
+                return Boolean(el.required) || this.agreementLikeCheckbox(el);
+            }
+            if (t === 'radio') {
+                if (el.checked) {
+                    return false;
+                }
+                const name = el.name;
+                if (!name) {
+                    return true;
+                }
+                if (radioGroupReported.has(name)) {
+                    return false;
+                }
+                const q = `input[type="radio"][name="${this._cssEscapeForSelector(name)}"]`;
+                if (document.querySelector(`${q}:checked`)) {
+                    return false;
+                }
+                radioGroupReported.add(name);
+                return true;
+            }
+            if (t === 'file') {
+                return Boolean(el.required) && (!el.files || el.files.length === 0);
+            }
+            return !String(el.value || '').trim();
+        }
+        if (tag === 'textarea') {
+            return !String(el.value || '').trim();
+        }
+        if (tag === 'select') {
+            const v = el.value;
+            return v === '' || v === null;
+        }
+        if (el.matches && el.matches('[contenteditable="true"]')) {
+            return !String(el.textContent || '').trim();
+        }
+        return false;
+    }
+
+    reminderLabelFor(el) {
+        const label = this.getFieldLabel(el);
+        if (label) {
+            return label.slice(0, 120);
+        }
+        if (el.placeholder) {
+            return el.placeholder.slice(0, 120);
+        }
+        if (el.name) {
+            return el.name;
+        }
+        if (el.id) {
+            return `#${el.id}`;
+        }
+        const t = (el.type || el.tagName || 'field').toString();
+        return t.toLowerCase();
+    }
+
+    clearUnfilledHighlights() {
+        this.unfilledHighlightEntries.forEach(
+            ({ element, originalOutline, originalOutlineOffset, originalBoxShadow }) => {
+                element.style.outline = originalOutline;
+                element.style.outlineOffset = originalOutlineOffset;
+                element.style.boxShadow = originalBoxShadow;
+            }
+        );
+        this.unfilledHighlightEntries = [];
+    }
+
+    applyUnfilledHighlights(elements) {
+        elements.forEach((element) => {
+            const originalOutline = element.style.outline;
+            const originalOutlineOffset = element.style.outlineOffset;
+            const originalBoxShadow = element.style.boxShadow;
+            element.style.outline = '2px dashed #e65100';
+            element.style.outlineOffset = '2px';
+            element.style.boxShadow = '0 0 0 3px rgba(230, 81, 0, 0.28)';
+            element.style.transition = 'outline 0.25s, box-shadow 0.25s';
+            this.unfilledHighlightEntries.push({
+                element,
+                originalOutline,
+                originalOutlineOffset,
+                originalBoxShadow
+            });
+        });
+    }
+
+    getUnfilledFieldsSummary(highlight) {
+        if (highlight) {
+            this.clearUnfilledHighlights();
+        }
+        const maxList = 40;
+        const candidates = this.collectFillableElements(220);
+        const radioGroupReported = new Set();
+        const unfilledEls = [];
+        for (let i = 0; i < candidates.length; i++) {
+            const el = candidates[i];
+            if (this.shouldRemindAsUnfilled(el, radioGroupReported)) {
+                unfilledEls.push(el);
+            }
+        }
+        unfilledEls.sort((a, b) => Number(b.required) - Number(a.required));
+        const capped = unfilledEls.slice(0, maxList);
+        if (highlight && capped.length > 0) {
+            this.applyUnfilledHighlights(capped);
+        }
+        const fields = capped.map((el) => ({
+            label: this.reminderLabelFor(el),
+            required: Boolean(el.required),
+            tag: el.tagName.toLowerCase(),
+            inputType: el.type || null
+        }));
+        return { fields, totalFound: unfilledEls.length };
+    }
+
     describeElement(element) {
         return {
             tag: element.tagName.toLowerCase(),
@@ -422,6 +603,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
                 case 'GET_VISIBLE_TEXT':
                     result = interactor.getVisibleText();
+                    break;
+
+                case 'GET_UNFILLED_FIELDS':
+                    result = interactor.getUnfilledFieldsSummary(message.highlight !== false);
+                    break;
+
+                case 'CLEAR_UNFILLED_HIGHLIGHTS':
+                    interactor.clearUnfilledHighlights();
+                    result = { cleared: true };
                     break;
 
                 default:

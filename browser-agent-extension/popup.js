@@ -14,6 +14,11 @@ class PopupController {
         this.pipelineBtn = document.getElementById('pipelineBtn');
         this.maxFormsInput = document.getElementById('maxFormsInput');
         this.maxParallelInput = document.getElementById('maxParallelInput');
+        this.projectFileInput = document.getElementById('projectFileInput');
+        this.clearFileBtn = document.getElementById('clearFileBtn');
+        this.sourceUrlInput = document.getElementById('sourceUrlInput');
+        this.pickProjectFileBtn = document.getElementById('pickProjectFileBtn');
+        this.unfilledReminderBtn = document.getElementById('unfilledReminderBtn');
 
         this.isRunning = false;
         this.logs = [];
@@ -45,6 +50,10 @@ class PopupController {
         // Settings button
         this.settingsBtn.addEventListener('click', () => this.openSettings());
 
+        if (this.unfilledReminderBtn) {
+            this.unfilledReminderBtn.addEventListener('click', () => this.checkUnfilledThisTab());
+        }
+
         // Quick action buttons
         this.quickActionBtns.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -55,6 +64,21 @@ class PopupController {
         });
 
         this.pipelineBtn.addEventListener('click', () => this.runPipeline());
+
+        if (this.pickProjectFileBtn && this.projectFileInput) {
+            this.pickProjectFileBtn.addEventListener('click', () => this.projectFileInput.click());
+        }
+
+        if (this.clearFileBtn && this.projectFileInput && this.sourceUrlInput) {
+            this.clearFileBtn.addEventListener('click', () => {
+                this.projectFileInput.value = '';
+                this.sourceUrlInput.value = '';
+            });
+        } else if (this.clearFileBtn && this.projectFileInput) {
+            this.clearFileBtn.addEventListener('click', () => {
+                this.projectFileInput.value = '';
+            });
+        }
 
         // Listen for messages from background script
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -121,11 +145,61 @@ class PopupController {
         }
     }
 
+    normalizeSourceUrl(raw) {
+        const t = (raw || '').trim();
+        if (!t) return '';
+        if (/^https?:\/\//i.test(t)) return t;
+        return `https://${t}`;
+    }
+
+    arrayBufferToBase64(buffer) {
+        let binary = '';
+        const bytes = new Uint8Array(buffer);
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+            const slice = bytes.subarray(i, i + chunk);
+            binary += String.fromCharCode.apply(null, slice);
+        }
+        return btoa(binary);
+    }
+
     async runPipeline() {
         const objective = this.taskInput.value.trim();
-        if (!objective) {
-            this.addLog('Enter an objective (e.g. computer science scholarships for high school seniors)', 'error');
+        const file = this.projectFileInput && this.projectFileInput.files && this.projectFileInput.files[0];
+
+        const sourceUrl = this.sourceUrlInput ? this.normalizeSourceUrl(this.sourceUrlInput.value) : '';
+
+        const VIDEO_EXT = ['.mp4', '.webm', '.mov', '.mkv', '.mpeg', '.mpg', '.m4v', '.avi'];
+
+        if (!objective && !file && !sourceUrl) {
+            this.addLog('Enter an objective and/or attach a file (PDF, DOCX, PPTX, video) and/or a project web link.', 'error');
             return;
+        }
+
+        let documentPayload = null;
+        if (file) {
+            const lower = file.name.toLowerCase();
+            const isVideo = VIDEO_EXT.some((e) => lower.endsWith(e));
+            const maxBytes = isVideo ? 50 * 1024 * 1024 : 6 * 1024 * 1024;
+            if (file.size > maxBytes) {
+                this.addLog(isVideo ? 'Video must be 50 MB or smaller.' : 'Document must be 6 MB or smaller.', 'error');
+                return;
+            }
+            if (
+                !isVideo &&
+                !lower.endsWith('.pdf') &&
+                !lower.endsWith('.docx') &&
+                !lower.endsWith('.pptx')
+            ) {
+                this.addLog('Supported uploads: .pdf, .docx, .pptx, or video (.mp4, .webm, .mov, …).', 'error');
+                return;
+            }
+            const buf = await file.arrayBuffer();
+            documentPayload = {
+                documentBase64: this.arrayBufferToBase64(buf),
+                documentName: file.name,
+                documentMime: file.type || 'application/octet-stream',
+            };
         }
 
         const maxForms = parseInt(this.maxFormsInput.value, 10) || 6;
@@ -135,14 +209,24 @@ class PopupController {
         this.pipelineTotal = 0;
         this.pipelineDone = 0;
         this.updateUIState();
-        this.addLog(`Pipeline: discovering forms for — ${objective}`, 'user');
+        const label = (() => {
+            const bits = [];
+            if (file) bits.push(file.name);
+            if (sourceUrl) bits.push(`link: ${sourceUrl}`);
+            if (bits.length && objective) return `Pipeline (${bits.join(' + ')}) + notes`;
+            if (bits.length) return `Pipeline from ${bits.join(' + ')}`;
+            return `Pipeline: discovering forms for — ${objective}`;
+        })();
+        this.addLog(label, 'user');
 
         try {
             const response = await chrome.runtime.sendMessage({
                 type: 'RUN_PIPELINE',
                 objective,
                 maxForms,
-                maxParallel
+                maxParallel,
+                sourceUrl,
+                ...(documentPayload || {}),
             });
 
             if (!response || !response.success) {
@@ -182,6 +266,55 @@ class PopupController {
         }
     }
 
+    async remindUnfilledForTab(tabId) {
+        if (tabId == null) {
+            return;
+        }
+        try {
+            const res = await chrome.runtime.sendMessage({
+                type: 'GET_UNFILLED_REMINDER',
+                tabId,
+                highlight: true
+            });
+            if (!res || !res.success) {
+                if (res && res.error) {
+                    this.addLog(`Unfilled reminder: ${res.error}`, 'error');
+                }
+                return;
+            }
+            const fields = res.fields || [];
+            const totalFound = typeof res.totalFound === 'number' ? res.totalFound : fields.length;
+            if (fields.length === 0) {
+                this.addLog(
+                    'Reminder: no empty fields matched our checklist on that tab. Still verify file uploads, CAPTCHAs, extra steps, and optional fields.',
+                    'reminder'
+                );
+                return;
+            }
+            const lines = fields.slice(0, 14).map(
+                (f) => `  • ${f.label}${f.required ? ' (required)' : ''}`
+            );
+            let body = `Reminder: ${totalFound} field(s) may still need input on that tab:\n${lines.join('\n')}`;
+            if (totalFound > 14) {
+                body += `\n  … and ${totalFound - 14} more (orange dashed outlines on the page)`;
+            } else {
+                body += '\nOrange dashed outlines mark these on the page.';
+            }
+            this.addLog(body, 'reminder');
+        } catch (e) {
+            this.addLog(`Unfilled reminder failed: ${e.message}`, 'error');
+        }
+    }
+
+    async checkUnfilledThisTab() {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab || tab.id == null) {
+            this.addLog('No active tab to scan', 'error');
+            return;
+        }
+        await this.remindUnfilledForTab(tab.id);
+    }
+
     async stopAgent() {
         try {
             await chrome.runtime.sendMessage({ type: 'STOP_AGENT' });
@@ -203,12 +336,36 @@ class PopupController {
             this.pipelineBtn.disabled = true;
             this.stopBtn.disabled = false;
             this.taskInput.disabled = true;
+            if (this.projectFileInput) {
+                this.projectFileInput.disabled = true;
+            }
+            if (this.sourceUrlInput) {
+                this.sourceUrlInput.disabled = true;
+            }
+            if (this.pickProjectFileBtn) {
+                this.pickProjectFileBtn.disabled = true;
+            }
+            if (this.clearFileBtn) {
+                this.clearFileBtn.disabled = true;
+            }
         } else {
             this.runBtn.disabled = false;
             this.runBtn.classList.remove('loading');
             this.pipelineBtn.disabled = false;
             this.stopBtn.disabled = true;
             this.taskInput.disabled = false;
+            if (this.projectFileInput) {
+                this.projectFileInput.disabled = false;
+            }
+            if (this.sourceUrlInput) {
+                this.sourceUrlInput.disabled = false;
+            }
+            if (this.pickProjectFileBtn) {
+                this.pickProjectFileBtn.disabled = false;
+            }
+            if (this.clearFileBtn) {
+                this.clearFileBtn.disabled = false;
+            }
         }
     }
 
@@ -219,6 +376,9 @@ class PopupController {
                 break;
             case 'AGENT_COMPLETE':
                 this.addLog('Tab task completed', 'system');
+                if (message.tabId != null) {
+                    setTimeout(() => this.remindUnfilledForTab(message.tabId), 450);
+                }
                 if (this.pipelineTotal > 0) {
                     this.pipelineMaybeFinish();
                 } else {
@@ -228,6 +388,9 @@ class PopupController {
                 break;
             case 'AGENT_ERROR':
                 this.addLog(`Agent error: ${message.error}`, 'error');
+                if (message.tabId != null) {
+                    setTimeout(() => this.remindUnfilledForTab(message.tabId), 450);
+                }
                 if (this.pipelineTotal > 0) {
                     this.pipelineMaybeFinish();
                 } else {

@@ -5,7 +5,7 @@ import os
 import uuid
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
@@ -14,7 +14,15 @@ from autogen.beta import Agent, PromptedSchema
 from autogen.beta.config import OpenAIConfig
 
 from server.discovery import discovery_search_health_detail, run_discovery
+from server.document_extract import extract_text_from_bytes
+from server.project_profile import (
+    enrich_discovered_forms_with_applicant_facts,
+    format_discovery_objective,
+    summarize_document_for_grants,
+)
+from server.smart_source_url import fetch_smart_profile_url
 from server.llm import build_llm_config
+from server.json_util import parse_prompted_agent_reply
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +50,7 @@ async def root() -> str:
   <li><a href="/docs">GET /docs</a> &mdash; interactive API (Swagger UI)</li>
 </ul>
 <p>Use the Chrome extension against <code>http://localhost:8000</code> (same as this host).</p>
-<p>Autonomous pipeline: <code>POST /pipeline/discover</code> then parallel fills from the extension.</p>
+<p>Autonomous pipeline: <code>POST /pipeline/discover</code> or <code>POST /pipeline/discover_from_document</code>, then parallel fills from the extension.</p>
 </body>
 </html>"""
 
@@ -61,7 +69,9 @@ Rules:
 - SCROLL params: direction "up"|"down", amount (pixels, number).
 - NAVIGATE params: url (string).
 - WAIT_FOR_ELEMENT params: selector (CSS), timeout (ms).
-- Prefer ids/names from the snapshot. Refuse unsafe goals with done=true and a short reasoning."""
+- Prefer ids/names from the snapshot. For Apply / Submit, pick the control listed in "buttons" (index or CSS) that matches the form you filled—avoid unrelated actions (search, newsletter).
+- When the task text includes the Applicant data extracted block (from uploaded materials), use those lines as the source of truth for FILL values (exact strings when labels match). Do not fabricate personal data not present there.
+- Respond with one raw JSON object only (no markdown code fences, no prose outside the JSON)."""
 
 
 REVIEWER_SYSTEM = """You are the reviewer agent in the FillNinja AG2 team.
@@ -70,7 +80,8 @@ You see the user's task, page URL/title, and one proposed browser action (type +
 Approve normal form fills, in-page clicks, scrolling, and benign navigation.
 Reject only for clear harm: exfiltration, phishing-like URLs, or actions that contradict the user's task.
 
-Your reply must match the JSON schema exactly (approved + reason)."""
+Your reply must match the JSON schema exactly (approved + reason).
+Respond with one raw JSON object only (no markdown code fences, no prose outside the JSON)."""
 
 
 class RunRequest(BaseModel):
@@ -215,7 +226,7 @@ async def run_agent_task(
 
             try:
                 preply = await planner.ask(user_content)
-                decision = await preply.content()
+                decision = await parse_prompted_agent_reply(preply, PlannerOutput)
             except ValidationError as e:
                 logger.exception("Planner schema validation failed")
                 await session.event_queue.put(
@@ -269,7 +280,7 @@ async def run_agent_task(
                 )
                 try:
                     rreply = await reviewer.ask(review_input)
-                    review = await rreply.content()
+                    review = await parse_prompted_agent_reply(rreply, ReviewOutput)
                 except ValidationError as e:
                     logger.exception("Reviewer schema validation failed")
                     await session.event_queue.put(
@@ -341,7 +352,8 @@ async def health() -> dict[str, Any]:
     return {
         "status": "ok",
         "pipeline": {
-            "discover": "POST /pipeline/discover",
+            "discover": "POST /pipeline/discover (JSON)",
+            "discover_from_document": "POST /pipeline/discover_from_document (multipart: optional file, optional source_url, optional objective)",
             "search": discovery_search_health_detail(),
         },
         "ag2": {
@@ -373,6 +385,75 @@ async def pipeline_discover(body: DiscoverRequest) -> dict[str, Any]:
             raise HTTPException(status_code=503, detail=msg) from e
         raise HTTPException(status_code=500, detail=msg) from e
     return result.model_dump()
+
+
+@app.post("/pipeline/discover_from_document")
+async def pipeline_discover_from_document(
+    objective: str = Form(""),
+    max_forms: int = Form(8),
+    source_url: str = Form(""),
+    file: UploadFile | None = File(None),
+) -> dict[str, Any]:
+    if not (
+        os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="OPENROUTER_API_KEY (or OPENAI_API_KEY) is not configured on the server",
+        )
+    url = source_url.strip()
+    raw_name = ""
+    file_body: bytes | None = None
+    if file is not None:
+        raw_name = (file.filename or "").strip()
+        if raw_name:
+            file_body = await file.read()
+            if not file_body:
+                raise HTTPException(status_code=422, detail="Empty file")
+
+    if not url and file_body is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide an uploaded file and/or source_url (https://...)",
+        )
+
+    chunks: list[str] = []
+    if url:
+        try:
+            fetched = await fetch_smart_profile_url(url)
+            chunks.append(f"[Source: web URL]\n{fetched}")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    if file_body is not None:
+        try:
+            chunks.append(f"[Source: uploaded file {raw_name}]\n" + extract_text_from_bytes(file_body, raw_name))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    doc_text = "\n\n---\n\n".join(chunks)
+
+    m = min(max(max_forms, 1), 20)
+    hints = objective.strip()
+    try:
+        profile = await summarize_document_for_grants(doc_text)
+        rich_objective = format_discovery_objective(hints, profile)
+        extras = [s.strip() for s in profile.search_query_suggestions if s.strip()][:5]
+        result = await run_discovery(rich_objective, m, extra_search_queries=extras or None)
+        enriched = enrich_discovered_forms_with_applicant_facts(result.forms, profile)
+        out = result.model_dump()
+        out["forms"] = [f.model_dump() for f in enriched]
+        out["project_profile"] = profile.model_dump()
+        return out
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except RuntimeError as e:
+        msg = str(e)
+        if "TAVILY_API_KEY" in msg or "tavily-python" in msg.lower():
+            raise HTTPException(status_code=503, detail=msg) from e
+        raise HTTPException(status_code=500, detail=msg) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.post("/agent/run")

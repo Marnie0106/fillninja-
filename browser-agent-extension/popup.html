@@ -175,6 +175,8 @@
             padding: 6px 0;
             border-bottom: 1px solid #333;
             color: #d4d4d4;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
 
         .log-entry:last-child {
@@ -200,6 +202,11 @@
         .log-entry.system {
             color: #858585;
             font-style: italic;
+        }
+
+        .log-entry.reminder {
+            color: #ffcc80;
+            font-style: normal;
         }
 
         .timestamp {
@@ -367,7 +374,9 @@ Examples:
 • Find the price of the top-rated product
 • Fill out the contact form with name 'John Doe'
 • Navigate to the pricing page and extract all plans
-• Click the login button and wait for the form"></textarea>
+• Click the login button and wait for the form
+
+Pipeline: attach PDF, DOCX, PPTX, or a video (voiceover / pitch), paste a public project page link, and/or type a goal."></textarea>
                 <div class="button-group">
                     <button class="btn-primary" id="runBtn">
                         <span class="spinner"></span>
@@ -375,13 +384,26 @@ Examples:
                     </button>
                     <button class="btn-secondary" id="stopBtn" disabled>Stop</button>
                 </div>
+                <button type="button" class="btn-secondary" id="unfilledReminderBtn" style="width:100%;margin-top:10px;padding:8px;font-size:12px">
+                    Show unfilled fields (this tab)
+                </button>
             </div>
 
             <div class="section">
                 <div class="section-title">Autonomous pipeline</div>
                 <p class="hint" style="font-size:12px;color:#666;margin-bottom:8px;line-height:1.4">
-                    Searches the web for matching application pages, then opens tabs and runs parallel fill agents (planner + reviewer each tab).
+                    Optional: PDF, DOCX, PPTX, or video (speech transcribed on the server). A public link: project page, **GitHub repo**, **YouTube** (captions when available), raw file URL, or typed notes—or combine them.
                 </p>
+                <label style="display:block;font-size:12px;color:#555;margin-bottom:6px">
+                    Project web page (optional)
+                    <input type="text" id="sourceUrlInput" inputmode="url" autocomplete="off" placeholder="https://… (page, GitHub repo, or YouTube)" style="display:block;width:100%;margin-top:6px;padding:8px;font-size:12px;border:1px solid #e9ecef;border-radius:6px">
+                </label>
+                <label style="display:block;font-size:12px;color:#555;margin-bottom:6px">
+                    Project document or video (optional)
+                    <input type="file" id="projectFileInput" accept=".pdf,.docx,.pptx,.mp4,.webm,.mov,.mkv,.mpeg,.mpg,.m4v,.avi,video/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation" style="display:block;width:100%;margin-top:6px;font-size:11px">
+                </label>
+                <button type="button" class="btn-secondary" id="pickProjectFileBtn" style="width:100%;margin-bottom:6px;padding:8px;font-size:12px">Choose file (PDF, DOCX, PPTX, or video)…</button>
+                <button type="button" class="btn-secondary" id="clearFileBtn" style="width:100%;margin-bottom:8px;padding:8px;font-size:12px">Clear file &amp; link</button>
                 <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
                     <label style="font-size:11px;color:#555">Max forms
                         <input type="number" id="maxFormsInput" value="6" min="1" max="20" style="width:48px;margin-left:4px;padding:4px">

@@ -38,6 +38,9 @@ class BackgroundController {
                 case 'STOP_AGENT':
                     await this.stopAllAgents(sendResponse);
                     break;
+                case 'GET_UNFILLED_REMINDER':
+                    await this.getUnfilledReminder(message, sendResponse);
+                    break;
                 case 'CONTENT_SCRIPT_READY':
                     sendResponse({ received: true });
                     break;
@@ -113,6 +116,11 @@ class BackgroundController {
     }
 
     async startAgentOnTab(tabId, task) {
+        try {
+            await this.executeOnTab(tabId, { action: 'CLEAR_UNFILLED_HIGHLIGHTS' });
+        } catch (e) {
+            /* tab may not have content script yet */
+        }
         const pageInfo = await this.executeOnTab(tabId, { action: 'GET_PAGE_INFO' });
         const domSnapshot = await this.executeOnTab(tabId, { action: 'GET_DOM_SNAPSHOT' });
 
@@ -174,17 +182,50 @@ class BackgroundController {
         const maxForms = Math.min(Math.max(parseInt(message.maxForms, 10) || 6, 1), 20);
         const maxParallel = Math.min(Math.max(parseInt(message.maxParallel, 10) || 2, 1), 6);
 
-        if (!objective) {
-            sendResponse({ success: false, error: 'Pipeline objective is empty' });
+        const docB64 = message.documentBase64;
+        const docName = (message.documentName || '').trim();
+        const hasDoc = Boolean(docB64 && docName);
+        const sourceUrl = (message.sourceUrl || '').trim();
+        const hasUrl = Boolean(sourceUrl);
+        const needsMultipart = hasDoc || hasUrl;
+
+        if (!objective && !hasDoc && !hasUrl) {
+            sendResponse({
+                success: false,
+                error: 'Pipeline objective is empty and no document or URL was provided',
+            });
             return;
         }
 
         try {
-            const res = await fetch(`${this.ag2BackendUrl}/pipeline/discover`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ objective, max_forms: maxForms })
-            });
+            let res;
+            if (needsMultipart) {
+                const form = new FormData();
+                if (hasDoc) {
+                    const binary = atob(docB64);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) {
+                        bytes[i] = binary.charCodeAt(i);
+                    }
+                    const blob = new Blob([bytes], { type: message.documentMime || 'application/octet-stream' });
+                    form.append('file', blob, docName);
+                }
+                form.append('objective', objective);
+                form.append('max_forms', String(maxForms));
+                if (hasUrl) {
+                    form.append('source_url', sourceUrl);
+                }
+                res = await fetch(`${this.ag2BackendUrl}/pipeline/discover_from_document`, {
+                    method: 'POST',
+                    body: form,
+                });
+            } else {
+                res = await fetch(`${this.ag2BackendUrl}/pipeline/discover`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ objective, max_forms: maxForms }),
+                });
+            }
 
             if (!res.ok) {
                 const t = await res.text();
@@ -193,6 +234,14 @@ class BackgroundController {
 
             const data = await res.json();
             const forms = data.forms || [];
+
+            if (data.project_profile && data.project_profile.summary) {
+                this.broadcastToPopup({
+                    type: 'AGENT_LOG',
+                    content: `Profile from your materials — ${data.project_profile.summary}`,
+                    logType: 'curator',
+                });
+            }
 
             this.broadcastToPopup({
                 type: 'AGENT_LOG',
@@ -324,7 +373,7 @@ class BackgroundController {
 
         if (event.type === 'complete') {
             this.teardownTask(taskId);
-            this.broadcastToPopup({ type: 'AGENT_COMPLETE', taskId });
+            this.broadcastToPopup({ type: 'AGENT_COMPLETE', taskId, tabId });
         }
 
         if (event.type === 'error') {
@@ -332,8 +381,44 @@ class BackgroundController {
             this.broadcastToPopup({
                 type: 'AGENT_ERROR',
                 error: event.error,
-                taskId
+                taskId,
+                tabId
             });
+        }
+    }
+
+    async getUnfilledReminder(message, sendResponse) {
+        const highlight = message.highlight !== false;
+        let tabId = message.tabId;
+        try {
+            if (tabId == null) {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                tabId = tab?.id;
+            }
+            if (!tabId) {
+                sendResponse({ success: false, error: 'No tab' });
+                return;
+            }
+            const tab = await chrome.tabs.get(tabId);
+            const u = tab.url || '';
+            if (u.startsWith('chrome://') || u.startsWith('chrome-extension://') || u.startsWith('about:')) {
+                sendResponse({ success: false, error: 'Page type not supported' });
+                return;
+            }
+            const res = await this.executeOnTab(tabId, {
+                action: 'GET_UNFILLED_FIELDS',
+                highlight
+            });
+            if (!res || !res.success) {
+                sendResponse({
+                    success: false,
+                    error: res?.error || 'Could not scan page (try refreshing the tab).'
+                });
+                return;
+            }
+            sendResponse({ success: true, ...res.result });
+        } catch (error) {
+            sendResponse({ success: false, error: error.message });
         }
     }
 
