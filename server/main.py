@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from autogen.beta import Agent
@@ -24,6 +24,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root() -> str:
+    return """<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>FillNinja Agent API</title></head>
+<body>
+<h1>FillNinja Agent API</h1>
+<p>Server is running. Use the links below to verify the API or inspect routes.</p>
+<ul>
+  <li><a href="/health">GET /health</a> &mdash; readiness check</li>
+  <li><a href="/docs">GET /docs</a> &mdash; interactive API (Swagger UI)</li>
+</ul>
+<p>Use the Chrome extension against <code>http://localhost:8000</code> (same as this host).</p>
+</body>
+</html>"""
 
 
 SYSTEM_PROMPT = """You are a browser automation agent. You receive a user task and a structured DOM snapshot (forms, inputs with indices, buttons, links).
