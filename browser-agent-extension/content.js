@@ -1,6 +1,12 @@
 // AG2 Browser Agent - Content Script
 // This script runs in the context of web pages and provides DOM interaction capabilities
 
+(function () {
+    if (globalThis.__fillNinjaContentScriptLoaded) {
+        return;
+    }
+    globalThis.__fillNinjaContentScriptLoaded = true;
+
 class PageInteractor {
     constructor() {
         this.highlightedElements = [];
@@ -630,3 +636,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Notify that content script is ready
 chrome.runtime.sendMessage({ type: 'CONTENT_SCRIPT_READY', url: window.location.href });
+})();

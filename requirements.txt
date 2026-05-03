@@ -1,4 +1,5 @@
-ag2[openai]>=0.2
+# AG2 with Daytona extra; GitHub source includes autogen.beta.extensions (PyPI wheel may not yet).
+ag2[openai,daytona] @ git+https://github.com/ag2ai/ag2.git
 ddgs>=9.0
 tavily-python>=0.5
 pypdf>=4.0
@@ -7,6 +8,7 @@ python-pptx>=0.6.21
 httpx>=0.27
 beautifulsoup4>=4.12
 fastapi>=0.109
+python-dotenv>=1.0
 python-multipart>=0.0.9
 uvicorn[standard]>=0.27
 pydantic>=2.0

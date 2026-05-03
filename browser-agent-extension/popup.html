@@ -34,6 +34,14 @@
             text-align: center;
         }
 
+        .header-logo {
+            display: block;
+            max-height: 56px;
+            width: auto;
+            margin: 0 auto 12px;
+            object-fit: contain;
+        }
+
         .header h1 {
             font-size: 20px;
             margin-bottom: 5px;
@@ -69,6 +77,64 @@
         .status-text {
             font-size: 12px;
             color: #666;
+        }
+
+        .popup-nav {
+            display: flex;
+            border-bottom: 1px solid #e9ecef;
+            background: #f8f9fa;
+        }
+
+        .nav-tab {
+            flex: 1;
+            padding: 10px 8px;
+            font-size: 13px;
+            font-weight: 600;
+            border: none;
+            background: transparent;
+            color: #666;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            border-radius: 0;
+        }
+
+        .nav-tab:hover {
+            color: #495057;
+            background: #f1f3f5;
+        }
+
+        .nav-tab-active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background: #fff;
+        }
+
+        .page-panel {
+            display: block;
+        }
+
+        .page-panel.hidden {
+            display: none;
+        }
+
+        .profile-hint {
+            font-size: 12px;
+            color: #666;
+            line-height: 1.4;
+            margin-bottom: 10px;
+        }
+
+        #personalProfileInput {
+            min-height: 220px;
+            font-size: 13px;
+        }
+
+        #profileSaveStatus {
+            font-size: 12px;
+            color: #28a745;
+            min-height: 18px;
+            margin-top: 8px;
         }
 
         .content {
@@ -209,6 +275,11 @@
             font-style: normal;
         }
 
+        .log-entry.extract {
+            color: #4ec9b0;
+            font-style: normal;
+        }
+
         .timestamp {
             color: #6a9955;
             margin-right: 8px;
@@ -284,6 +355,74 @@
             transform: translateX(20px);
         }
 
+        .context-picker-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 0;
+            font-size: 13px;
+            color: #555;
+        }
+
+        .context-picker-row label {
+            min-width: 70px;
+            font-weight: 500;
+        }
+
+        .context-picker-row select {
+            flex: 1;
+            padding: 6px 8px;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 13px;
+            background: #fff;
+        }
+
+        .profile-toolbar {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .profile-toolbar select {
+            flex: 1;
+            padding: 6px 8px;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 13px;
+            background: #fff;
+        }
+
+        .profile-toolbar button {
+            flex: 0;
+            padding: 6px 10px;
+            font-size: 12px;
+        }
+
+        .profile-section-divider {
+            border: none;
+            border-top: 1px solid #e9ecef;
+            margin: 20px 0 16px;
+            height: 0;
+        }
+
+        .profile-section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 12px;
+        }
+
+        input.name-input {
+            width: 100%;
+            padding: 7px 10px;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
         .quick-actions {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -336,8 +475,9 @@
 <body>
     <div class="container">
         <div class="header">
+            <img class="header-logo" src="icons/fillninja.png" alt="" width="56" height="56">
             <h1>FillNinja Agent</h1>
-            <p>Discovery to parallel fill — multi-agent pipeline</p>
+            <p>Discover candidate forms, then fill them when you choose</p>
         </div>
 
         <div class="status-bar">
@@ -345,22 +485,27 @@
             <span class="status-text" id="statusText">Disconnected</span>
         </div>
 
+        <div class="popup-nav" role="tablist">
+            <button type="button" class="nav-tab nav-tab-active" id="navMainTab" role="tab" aria-selected="true">Agent</button>
+            <button type="button" class="nav-tab" id="navProfileTab" role="tab" aria-selected="false">My profile</button>
+        </div>
+
         <div class="content">
+            <div id="page-main" class="page-panel">
+            <!-- Context Picker -->
+            <div class="section">
+                <div class="context-picker-row">
+                    <label for="projectSelect">Choose profile/document:</label>
+                    <select id="projectSelect"></select>
+                </div>
+            </div>
+
             <!-- Quick Actions -->
             <div class="section">
                 <div class="section-title">Quick Actions</div>
                 <div class="quick-actions">
-                    <button class="quick-action-btn" data-prompt="Extract all links from this page">
-                        Extract links
-                    </button>
-                    <button class="quick-action-btn" data-prompt="Summarize the main content of this page">
-                        Summarize
-                    </button>
-                    <button class="quick-action-btn" data-prompt="Fill out any forms on this page with test data">
+                    <button class="quick-action-btn" data-prompt="Fill out any forms on this page using Applicant data from My profile when the extension provides it; otherwise use clear placeholder values. Do not click Submit or any final apply/send button; stop after filling so I can review and submit myself.">
                         Fill forms
-                    </button>
-                    <button class="quick-action-btn" data-prompt="Describe the visible structure of this page (headings, main buttons, forms)">
-                        Page structure
                     </button>
                 </div>
             </div>
@@ -390,42 +535,56 @@ Pipeline: attach PDF, DOCX, PPTX, or a video (voiceover / pitch), paste a public
             </div>
 
             <div class="section">
-                <div class="section-title">Autonomous pipeline</div>
-                <p class="hint" style="font-size:12px;color:#666;margin-bottom:8px;line-height:1.4">
-                    Optional: PDF, DOCX, PPTX, or video (speech transcribed on the server). A public link: project page, **GitHub repo**, **YouTube** (captions when available), raw file URL, or typed notes—or combine them.
-                </p>
                 <label style="display:block;font-size:12px;color:#555;margin-bottom:6px">
-                    Project web page (optional)
-                    <input type="text" id="sourceUrlInput" inputmode="url" autocomplete="off" placeholder="https://… (page, GitHub repo, or YouTube)" style="display:block;width:100%;margin-top:6px;padding:8px;font-size:12px;border:1px solid #e9ecef;border-radius:6px">
+                    Project page link (optional)
+                    <input type="text" id="sourceUrlInput" inputmode="url" autocomplete="off" placeholder="https://… (GitHub, portfolio, project page)" style="display:block;width:100%;margin-top:6px;padding:8px;font-size:12px;border:1px solid #e9ecef;border-radius:6px">
                 </label>
-                <label style="display:block;font-size:12px;color:#555;margin-bottom:6px">
-                    Project document or video (optional)
-                    <input type="file" id="projectFileInput" accept=".pdf,.docx,.pptx,.mp4,.webm,.mov,.mkv,.mpeg,.mpg,.m4v,.avi,video/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation" style="display:block;width:100%;margin-top:6px;font-size:11px">
-                </label>
-                <button type="button" class="btn-secondary" id="pickProjectFileBtn" style="width:100%;margin-bottom:6px;padding:8px;font-size:12px">Choose file (PDF, DOCX, PPTX, or video)…</button>
-                <button type="button" class="btn-secondary" id="clearFileBtn" style="width:100%;margin-bottom:8px;padding:8px;font-size:12px">Clear file &amp; link</button>
-                <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
                     <label style="font-size:11px;color:#555">Max forms
                         <input type="number" id="maxFormsInput" value="6" min="1" max="20" style="width:48px;margin-left:4px;padding:4px">
                     </label>
-                    <label style="font-size:11px;color:#555">Parallel tabs
+                    <label style="font-size:11px;color:#555">Parallel tabs (fill step)
                         <input type="number" id="maxParallelInput" value="2" min="1" max="6" style="width:48px;margin-left:4px;padding:4px">
                     </label>
                 </div>
-                <button class="btn-primary" id="pipelineBtn" type="button">
-                    <span class="btn-text">Discover + fill (pipeline)</span>
-                </button>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+                    <button class="btn-primary" id="discoverFormsBtn" type="button">
+                        <span class="btn-text">Discover forms</span>
+                    </button>
+                    <button class="btn-secondary" id="fillFromLastDiscoveryBtn" type="button">
+                        <span class="btn-text">Fill from last discovery</span>
+                    </button>
+                </div>
             </div>
 
-            <!-- Logs -->
-            <div class="section">
-                <div class="section-title">Activity Log</div>
-                <div class="logs-container" id="logsContainer">
-                    <div class="empty-state">No activity yet. Start by entering a task above.</div>
-                </div>
-                <div class="button-group">
-                    <button class="btn-secondary" id="clearBtn">Clear Logs</button>
-                    <button class="btn-secondary" id="settingsBtn">Settings</button>
+            </div>
+
+            <div id="page-profile" class="page-panel hidden">
+                <!-- About Me Section -->
+                <div class="section">
+                    <div class="section-title">About me</div>
+                    <p class="profile-hint" style="margin-bottom:12px">
+                        Store your résumés, profiles, and project facts. Upload documents to extract facts, or paste text directly. Switch between them when filling forms.
+                    </p>
+                    <div class="profile-toolbar">
+                        <select id="projectSelectTab"></select>
+                        <button type="button" class="btn-secondary" id="addProjectBtn" style="padding:6px 12px;font-size:12px">+ New</button>
+                        <button type="button" class="btn-secondary" id="deleteProjectBtn" style="padding:6px 12px;font-size:12px">Delete</button>
+                    </div>
+
+                    <label style="display:block;font-size:12px;color:#555;margin-bottom:4px">Name</label>
+                    <input type="text" id="projectNameInput" class="name-input" placeholder="e.g. My Resume 2024, Senior Dev, Personal Info, Grant Project">
+
+                    <label style="display:block;font-size:12px;color:#555;margin-bottom:4px">Upload document (optional)</label>
+                    <input type="file" id="projectFileInput" accept=".pdf,.docx,.pptx,.mp4,.webm,.mov,.mkv,.mpeg,.mpg,.m4v,.avi,video/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation" style="display:none" aria-hidden="true">
+                    <button type="button" class="btn-secondary" id="pickProjectFileBtn" style="width:100%;margin-bottom:6px;padding:8px;font-size:12px">Choose file (PDF, DOCX, PPTX, or video)…</button>
+                    <button type="button" class="btn-secondary" id="clearFileBtn" style="width:100%;margin-bottom:12px;padding:8px;font-size:12px">Clear file</button>
+
+                    <label style="display:block;font-size:12px;color:#555;margin-bottom:4px">Facts &amp; information</label>
+                    <textarea id="projectContextInput" placeholder="Paste info here, or extracted facts will appear after uploading a document. Include your contact info, experience, education, project details, etc." style="min-height:150px"></textarea>
+
+                    <button type="button" class="btn-primary" id="saveProjectTabBtn" style="width:100%;margin-top:10px">Save</button>
+                    <div id="projectTabSaveStatus" aria-live="polite"></div>
                 </div>
             </div>
         </div>

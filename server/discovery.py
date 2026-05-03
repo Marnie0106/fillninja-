@@ -24,7 +24,7 @@ You receive the user's goal (scholarships, grants, surveys, job applications, pr
 Pick distinct HTTPS pages where someone would realistically complete an application, registration, survey, or intake form.
 Avoid: generic homepages with no form path, pure news, social timelines, obvious junk. Prefer .edu, foundations, company career portals, government forms when relevant.
 
-Each item must include fill_task: a short high-level instruction for the Fill agents (what to accomplish on this page). Concrete personal field values are appended automatically when the user supplied a document or project URL. Prefer: complete the application using user-provided facts; do not submit if the user asked for dry-run.
+Each item must include fill_task: a short high-level instruction for the Fill agents (what to accomplish on this page). Concrete personal field values are appended automatically when the user supplied a document or project URL. Prefer: fill required fields using user-provided facts; do not instruct the fill agent to submit or send the form unless the user's objective explicitly asks for submission. Do not submit if the user asked for a dry-run.
 
 Return one JSON object only: no markdown, no code fences, no text before or after."""
 
