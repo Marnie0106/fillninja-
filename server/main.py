@@ -8,8 +8,10 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from openai import OpenAI
 from pydantic import BaseModel
+
+from autogen.beta import Agent
+from autogen.beta.config import OpenAIConfig
 
 logger = logging.getLogger(__name__)
 
@@ -115,21 +117,39 @@ def parse_model_json(text: str) -> dict[str, Any]:
     return json.loads(raw)
 
 
-def call_openai(messages: list[dict[str, str]], model: str) -> str:
-    key = os.environ.get("OPENAI_API_KEY")
+def _openrouter_headers() -> dict[str, str]:
+    referer = os.environ.get("OPENROUTER_HTTP_REFERER")
+    title = os.environ.get("OPENROUTER_APP_TITLE", "FillNinja")
+    headers: dict[str, str] = {"X-Title": title}
+    if referer:
+        headers["HTTP-Referer"] = referer
+    return headers
+
+
+def llm_api_key() -> str:
+    key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
     if not key:
-        raise RuntimeError("OPENAI_API_KEY is not set")
-    client = OpenAI(api_key=key)
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages,
+        raise RuntimeError(
+            "Set OPENROUTER_API_KEY (OpenRouter) or OPENAI_API_KEY in the environment"
+        )
+    return key
+
+
+def build_fillninja_agent() -> Agent:
+    config = OpenAIConfig(
+        model=os.environ.get("OPENROUTER_MODEL", "google/gemini-2.5-flash"),
+        streaming=False,
+        api_key=llm_api_key(),
+        base_url=os.environ.get(
+            "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
+        ),
+        max_completion_tokens=int(
+            os.environ.get("OPENROUTER_MAX_COMPLETION_TOKENS", "1024")
+        ),
         temperature=0.2,
-        max_tokens=1200,
+        default_headers=_openrouter_headers(),
     )
-    msg = response.choices[0].message.content
-    if not msg:
-        return "{}"
-    return msg
+    return Agent("fillninja", prompt=[SYSTEM_PROMPT], config=config)
 
 
 def normalize_action(action: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -146,17 +166,24 @@ async def run_agent_task(
     page_info: dict[str, Any],
     dom_snapshot: dict[str, Any],
 ) -> None:
-    agent = tasks.get(task_id)
-    if agent is None:
+    session = tasks.get(task_id)
+    if session is None:
         return
 
-    model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
     results_log: list[dict[str, Any]] = []
 
     try:
+        llm_agent = build_fillninja_agent()
+    except RuntimeError as e:
+        await session.event_queue.put({"type": "error", "error": str(e)})
+        return
+
+    try:
         for step in range(28):
-            if agent.stopped:
-                await agent.event_queue.put({"type": "error", "error": "Task cancelled"})
+            if session.stopped:
+                await session.event_queue.put(
+                    {"type": "error", "error": "Task cancelled"}
+                )
                 return
 
             user_content = (
@@ -166,43 +193,40 @@ async def run_agent_task(
                 f"dom_snapshot: {truncate_snapshot(dom_snapshot)}\n\n"
                 f"previous_results: {json.dumps(results_log, default=str, ensure_ascii=False)}"
             )
-            messages: list[dict[str, str]] = [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_content},
-            ]
 
-            await agent.event_queue.put(
+            await session.event_queue.put(
                 {"log": f"Planning step {step + 1}...", "log_type": "agent"}
             )
 
             try:
-                text = await asyncio.to_thread(call_openai, messages, model)
+                reply = await llm_agent.ask(user_content)
+                text = reply.body or "{}"
                 decision = parse_model_json(text)
             except json.JSONDecodeError as e:
                 logger.exception("Model JSON parse failed")
-                await agent.event_queue.put(
+                await session.event_queue.put(
                     {"log": f"Model returned invalid JSON: {e}", "log_type": "agent"}
                 )
-                await agent.event_queue.put(
+                await session.event_queue.put(
                     {"type": "error", "error": f"Invalid model response: {e}"}
                 )
                 return
             except Exception as e:
-                logger.exception("OpenAI call failed")
-                await agent.event_queue.put({"type": "error", "error": str(e)})
+                logger.exception("LLM call failed")
+                await session.event_queue.put({"type": "error", "error": str(e)})
                 return
 
             reasoning = decision.get("reasoning", "")
             if reasoning:
-                await agent.event_queue.put({"log": reasoning, "log_type": "agent"})
+                await session.event_queue.put({"log": reasoning, "log_type": "agent"})
 
             if decision.get("done") is True:
-                await agent.event_queue.put({"type": "complete"})
+                await session.event_queue.put({"type": "complete"})
                 return
 
             action = decision.get("action")
             if not action or not isinstance(action, dict):
-                await agent.event_queue.put(
+                await session.event_queue.put(
                     {
                         "type": "error",
                         "error": "Model returned no action while done is false",
@@ -213,7 +237,7 @@ async def run_agent_task(
             try:
                 atype, params = normalize_action(action)
             except Exception as e:
-                await agent.event_queue.put({"type": "error", "error": str(e)})
+                await session.event_queue.put({"type": "error", "error": str(e)})
                 return
 
             action_id = str(uuid.uuid4())
@@ -222,9 +246,9 @@ async def run_agent_task(
                 "log_type": "agent",
                 "action": {"id": action_id, "type": atype, "params": params},
             }
-            await agent.event_queue.put(payload)
+            await session.event_queue.put(payload)
 
-            outcome = await agent.wait_action_result(action_id)
+            outcome = await session.wait_action_result(action_id)
             results_log.append(
                 {
                     "step": step,
@@ -235,10 +259,10 @@ async def run_agent_task(
                 }
             )
 
-        await agent.event_queue.put(
+        await session.event_queue.put(
             {"log": "Stopped after maximum steps", "log_type": "agent"}
         )
-        await agent.event_queue.put({"type": "complete"})
+        await session.event_queue.put({"type": "complete"})
     finally:
         asyncio.create_task(_cleanup_task_slot(task_id))
 
@@ -250,10 +274,12 @@ async def health() -> dict[str, str]:
 
 @app.post("/agent/run")
 async def start_run(body: RunRequest) -> dict[str, str]:
-    if not os.environ.get("OPENAI_API_KEY"):
+    if not (
+        os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    ):
         raise HTTPException(
             status_code=503,
-            detail="OPENAI_API_KEY is not configured on the server",
+            detail="OPENROUTER_API_KEY (or OPENAI_API_KEY) is not configured on the server",
         )
 
     task_id = str(uuid.uuid4())
