@@ -47,7 +47,7 @@ The extension uses `http://localhost:8000` by default (same machine).
 | Path | Purpose |
 |------|---------|
 | `browser-agent-extension/` | Chrome extension (popup, service worker, content script). |
-| `server/main.py` | FastAPI app plus AG2 `Agent` + `OpenAIConfig` (OpenRouter-compatible). |
+| `server/main.py` | FastAPI + **two** AG2 `Agent`s (planner + reviewer), `PromptedSchema` JSON output, shared `OpenAIConfig`. Set `FILLNINJA_ENABLE_REVIEWER=0` for planner only. |
 | `fillninja-pitch-deck.html` | Single-file pitch deck. |
 | `scripts/generate_icons.py` | Optional: regenerate `icons/*.png` with Pillow. |
 

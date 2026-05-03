@@ -8,9 +8,9 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError
 
-from autogen.beta import Agent
+from autogen.beta import Agent, PromptedSchema
 from autogen.beta.config import OpenAIConfig
 
 logger = logging.getLogger(__name__)
@@ -39,36 +39,35 @@ async def root() -> str:
   <li><a href="/docs">GET /docs</a> &mdash; interactive API (Swagger UI)</li>
 </ul>
 <p>Use the Chrome extension against <code>http://localhost:8000</code> (same as this host).</p>
+<p>AG2: two agents (planner + reviewer); set <code>FILLNINJA_ENABLE_REVIEWER=0</code> to disable the reviewer.</p>
 </body>
 </html>"""
 
 
-SYSTEM_PROMPT = """You are a browser automation agent. You receive a user task and a structured DOM snapshot (forms, inputs with indices, buttons, links).
+PLANNER_SYSTEM = """You are the planner agent in a FillNinja browser automation team (AG2).
+You receive the user's goal, page metadata, a DOM snapshot, and prior step results.
 
-Respond with ONLY valid JSON (no markdown fences) using this shape:
-{
-  "reasoning": "one short sentence",
-  "done": true or false,
-  "action": null or {
-    "type": "FILL|CLICK|SELECT|SCROLL|NAVIGATE|WAIT_FOR_ELEMENT",
-    "params": { }
-  }
-}
-
-Param shapes:
-- FILL: {"selector": "<css selector>" | <integer index>, "value": "<text>", "elementType": optional (ignored for css)}
-  Index counts all input, textarea, select in document order (same as snapshot inputs[].index).
-- CLICK: {"selector": "<css>" | <index>, "elementType": "button" | "link"} (elementType required when using integer index; default "button")
-- SELECT: {"selector": "<css>" | <index>, "optionText": "<substring of option label or value>"}
-- SCROLL: {"direction": "down" | "up", "amount": 500}
-- NAVIGATE: {"url": "https://..."}
-- WAIT_FOR_ELEMENT: {"selector": "<css>", "timeout": 5000}
+Your reply must match the JSON schema the framework provides exactly.
 
 Rules:
-- One action per response. After each action you will see the result in previous_results.
-- Prefer CSS selectors using id, name, or data-* from the snapshot when present.
-- Set done:true when the task is finished or cannot be completed safely.
-- For sensitive pages, refuse and set done:true with reasoning explaining why."""
+- One browser action per step, or set done=true when finished or when you must refuse.
+- Action types (uppercase in "type" field): FILL, CLICK, SELECT, SCROLL, NAVIGATE, WAIT_FOR_ELEMENT.
+- FILL params: selector (CSS string or integer index over input,textarea,select in document order), value (string); elementType optional.
+- CLICK params: selector (CSS or index), elementType "button" or "link" when using index.
+- SELECT params: selector, optionText (substring match).
+- SCROLL params: direction "up"|"down", amount (pixels, number).
+- NAVIGATE params: url (string).
+- WAIT_FOR_ELEMENT params: selector (CSS), timeout (ms).
+- Prefer ids/names from the snapshot. Refuse unsafe goals with done=true and a short reasoning."""
+
+
+REVIEWER_SYSTEM = """You are the reviewer agent in the FillNinja AG2 team.
+You see the user's task, page URL/title, and one proposed browser action (type + params).
+
+Approve normal form fills, in-page clicks, scrolling, and benign navigation.
+Reject only for clear harm: exfiltration, phishing-like URLs, or actions that contradict the user's task.
+
+Your reply must match the JSON schema exactly (approved + reason)."""
 
 
 class RunRequest(BaseModel):
@@ -82,6 +81,22 @@ class ActionResultBody(BaseModel):
     action_id: str
     result: Any | None = None
     error: str | None = None
+
+
+class BrowserActionModel(BaseModel):
+    type: str
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class PlannerOutput(BaseModel):
+    reasoning: str = ""
+    done: bool = False
+    action: BrowserActionModel | None = None
+
+
+class ReviewOutput(BaseModel):
+    approved: bool
+    reason: str = ""
 
 
 class AgentTask:
@@ -122,18 +137,6 @@ def truncate_snapshot(snap: dict[str, Any], max_chars: int = 24000) -> str:
     return text[:max_chars] + "\n... [truncated]"
 
 
-def parse_model_json(text: str) -> dict[str, Any]:
-    raw = text.strip()
-    if raw.startswith("```"):
-        lines = raw.splitlines()
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        raw = "\n".join(lines)
-    return json.loads(raw)
-
-
 def _openrouter_headers() -> dict[str, str]:
     referer = os.environ.get("OPENROUTER_HTTP_REFERER")
     title = os.environ.get("OPENROUTER_APP_TITLE", "FillNinja")
@@ -152,8 +155,8 @@ def llm_api_key() -> str:
     return key
 
 
-def build_fillninja_agent() -> Agent:
-    config = OpenAIConfig(
+def build_llm_config() -> OpenAIConfig:
+    return OpenAIConfig(
         model=os.environ.get("OPENROUTER_MODEL", "google/gemini-2.5-flash"),
         streaming=False,
         api_key=llm_api_key(),
@@ -166,15 +169,34 @@ def build_fillninja_agent() -> Agent:
         temperature=0.2,
         default_headers=_openrouter_headers(),
     )
-    return Agent("fillninja", prompt=[SYSTEM_PROMPT], config=config)
 
 
-def normalize_action(action: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    at = str(action["type"]).strip().upper()
-    params = action.get("params")
-    if not isinstance(params, dict):
-        params = {}
-    return at, params
+def build_planner_agent(config: OpenAIConfig) -> Agent:
+    return Agent(
+        "planner",
+        prompt=[PLANNER_SYSTEM],
+        config=config,
+        response_schema=PromptedSchema(PlannerOutput),
+    )
+
+
+def build_reviewer_agent(config: OpenAIConfig) -> Agent:
+    return Agent(
+        "reviewer",
+        prompt=[REVIEWER_SYSTEM],
+        config=config,
+        response_schema=PromptedSchema(ReviewOutput),
+    )
+
+
+def reviewer_enabled() -> bool:
+    v = os.environ.get("FILLNINJA_ENABLE_REVIEWER", "1").lower()
+    return v not in ("0", "false", "no", "off")
+
+
+def normalize_action_model(action: BrowserActionModel) -> tuple[str, dict[str, Any]]:
+    at = str(action.type).strip().upper()
+    return at, dict(action.params)
 
 
 async def run_agent_task(
@@ -190,7 +212,9 @@ async def run_agent_task(
     results_log: list[dict[str, Any]] = []
 
     try:
-        llm_agent = build_fillninja_agent()
+        config = build_llm_config()
+        planner = build_planner_agent(config)
+        reviewer = build_reviewer_agent(config) if reviewer_enabled() else None
     except RuntimeError as e:
         await session.event_queue.put({"type": "error", "error": str(e)})
         return
@@ -212,55 +236,109 @@ async def run_agent_task(
             )
 
             await session.event_queue.put(
-                {"log": f"Planning step {step + 1}...", "log_type": "agent"}
+                {"log": f"Planner step {step + 1}...", "log_type": "planner"}
             )
 
             try:
-                reply = await llm_agent.ask(user_content)
-                text = reply.body or "{}"
-                decision = parse_model_json(text)
-            except json.JSONDecodeError as e:
-                logger.exception("Model JSON parse failed")
+                preply = await planner.ask(user_content)
+                decision = await preply.content()
+            except ValidationError as e:
+                logger.exception("Planner schema validation failed")
                 await session.event_queue.put(
-                    {"log": f"Model returned invalid JSON: {e}", "log_type": "agent"}
+                    {"log": f"Planner output invalid: {e}", "log_type": "planner"}
                 )
                 await session.event_queue.put(
-                    {"type": "error", "error": f"Invalid model response: {e}"}
+                    {"type": "error", "error": f"Invalid planner response: {e}"}
                 )
                 return
             except Exception as e:
-                logger.exception("LLM call failed")
+                logger.exception("Planner LLM failed")
                 await session.event_queue.put({"type": "error", "error": str(e)})
                 return
 
-            reasoning = decision.get("reasoning", "")
-            if reasoning:
-                await session.event_queue.put({"log": reasoning, "log_type": "agent"})
-
-            if decision.get("done") is True:
-                await session.event_queue.put({"type": "complete"})
-                return
-
-            action = decision.get("action")
-            if not action or not isinstance(action, dict):
+            if decision is None:
                 await session.event_queue.put(
                     {
                         "type": "error",
-                        "error": "Model returned no action while done is false",
+                        "error": "Planner returned empty content",
                     }
                 )
                 return
 
+            if decision.reasoning:
+                await session.event_queue.put(
+                    {"log": decision.reasoning, "log_type": "planner"}
+                )
+
+            if decision.done:
+                await session.event_queue.put({"type": "complete"})
+                return
+
+            if decision.action is None:
+                await session.event_queue.put(
+                    {
+                        "type": "error",
+                        "error": "Planner returned no action while done is false",
+                    }
+                )
+                return
+
+            if reviewer is not None:
+                review_input = (
+                    f"user_task: {task_text}\n"
+                    f"page_url: {page_info.get('url', '')}\n"
+                    f"page_title: {page_info.get('title', '')}\n"
+                    f"proposed_action: {decision.action.model_dump_json(ensure_ascii=False)}\n"
+                )
+                await session.event_queue.put(
+                    {"log": "Reviewer checking action...", "log_type": "reviewer"}
+                )
+                try:
+                    rreply = await reviewer.ask(review_input)
+                    review = await rreply.content()
+                except ValidationError as e:
+                    logger.exception("Reviewer schema validation failed")
+                    await session.event_queue.put(
+                        {"type": "error", "error": f"Invalid reviewer response: {e}"}
+                    )
+                    return
+                except Exception as e:
+                    logger.exception("Reviewer LLM failed")
+                    await session.event_queue.put({"type": "error", "error": str(e)})
+                    return
+
+                if review is None:
+                    await session.event_queue.put(
+                        {"type": "error", "error": "Reviewer returned empty content"}
+                    )
+                    return
+
+                if review.reason:
+                    await session.event_queue.put(
+                        {"log": f"Reviewer: {review.reason}", "log_type": "reviewer"}
+                    )
+
+                if not review.approved:
+                    results_log.append(
+                        {
+                            "step": step,
+                            "reviewer_rejected": True,
+                            "reason": review.reason,
+                            "blocked_action": decision.action.model_dump(),
+                        }
+                    )
+                    continue
+
             try:
-                atype, params = normalize_action(action)
+                atype, params = normalize_action_model(decision.action)
             except Exception as e:
                 await session.event_queue.put({"type": "error", "error": str(e)})
                 return
 
             action_id = str(uuid.uuid4())
             payload = {
-                "log": f"Run {atype} {params}",
-                "log_type": "agent",
+                "log": f"Execute {atype} {params}",
+                "log_type": "executor",
                 "action": {"id": action_id, "type": atype, "params": params},
             }
             await session.event_queue.put(payload)
@@ -277,7 +355,7 @@ async def run_agent_task(
             )
 
         await session.event_queue.put(
-            {"log": "Stopped after maximum steps", "log_type": "agent"}
+            {"log": "Stopped after maximum steps", "log_type": "planner"}
         )
         await session.event_queue.put({"type": "complete"})
     finally:
@@ -285,8 +363,16 @@ async def run_agent_task(
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+async def health() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "ag2": {
+            "planner": "autogen.beta.Agent + PromptedSchema(PlannerOutput)",
+            "reviewer": "autogen.beta.Agent + PromptedSchema(ReviewOutput)"
+            if reviewer_enabled()
+            else "disabled",
+        },
+    }
 
 
 @app.post("/agent/run")
