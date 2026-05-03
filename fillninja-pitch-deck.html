@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FillNinja — Pitch Deck</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0a0a0f;
+    --paper: #f5f3ee;
+    --accent: #ff3d2e;
+    --accent2: #00c896;
+    --mid: #8a8880;
+    --border: #d8d4cc;
+    --card: #ffffff;
+  }
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; scroll-snap-type: y mandatory; }
+
+body {
+font-family: 'Syne', sans-serif;
+background: var(--paper);
+color: var(--ink);
+overflow-x: hidden;
+cursor: none;
+}
+
+/* Custom Cursor */
+.cursor {
+position: fixed;
+width: 10px; height: 10px;
+background: var(--accent);
+border-radius: 50%;
+pointer-events: none;
+z-index: 9999;
+transition: transform 0.15s ease;
+mix-blend-mode: multiply;
+}
+.cursor-ring {
+position: fixed;
+width: 36px; height: 36px;
+border: 1.5px solid var(--accent);
+border-radius: 50%;
+pointer-events: none;
+z-index: 9998;
+transition: all 0.25s ease;
+mix-blend-mode: multiply;
+}
+
+/* Slide system */
+.slide {
+min-height: 100vh;
+scroll-snap-align: start;
+position: relative;
+overflow: hidden;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+
+/* Nav dots */
+.nav-dots {
+position: fixed;
+right: 28px;
+top: 50%;
+transform: translateY(-50%);
+display: flex;
+flex-direction: column;
+gap: 12px;
+z-index: 100;
+}
+.nav-dot {
+width: 6px; height: 6px;
+border-radius: 50%;
+background: var(--border);
+cursor: pointer;
+transition: all 0.3s;
+}
+.nav-dot.active { background: var(--accent); transform: scale(1.6); }
+
+/* Slide counter */
+.slide-num {
+position: fixed;
+bottom: 28px;
+right: 28px;
+font-family: 'JetBrains Mono', monospace;
+font-size: 11px;
+color: var(--mid);
+z-index: 100;
+letter-spacing: 0.1em;
+}
+
+/* ── SLIDE 1: TITLE ── */
+#s1 {
+background: var(--ink);
+flex-direction: column;
+align-items: flex-start;
+padding: 80px 10vw;
+}
+.tag-line {
+font-family: 'JetBrains Mono', monospace;
+font-size: 11px;
+letter-spacing: 0.3em;
+text-transform: uppercase;
+color: var(--accent2);
+margin-bottom: 32px;
+opacity: 0;
+animation: fadeUp 0.6s 0.2s forwards;
+}
+.hero-title {
+font-size: clamp(72px, 12vw, 160px);
+font-weight: 800;
+line-height: 0.9;
+color: var(--paper);
+letter-spacing: -0.04em;
+opacity: 0;
+animation: fadeUp 0.7s 0.4s forwards;
+}
+.hero-title span { color: var(--accent); }
+.hero-sub {
+margin-top: 40px;
+font-size: 18px;
+color: #888;
+max-width: 480px;
+line-height: 1.6;
+font-weight: 400;
+opacity: 0;
+animation: fadeUp 0.6s 0.7s forwards;
+}
+.hero-badge {
+margin-top: 60px;
+display: inline-flex;
+align-items: center;
+gap: 10px;
+background: var(--accent);
+color: white;
+padding: 10px 22px;
+border-radius: 2px;
+font-size: 13px;
+font-weight: 700;
+letter-spacing: 0.08em;
+text-transform: uppercase;
+opacity: 0;
+animation: fadeUp 0.6s 0.9s forwards;
+}
+.grid-bg {
+position: absolute;
+inset: 0;
+background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+background-size: 60px 60px;
+pointer-events: none;
+}
+.big-num {
+position: absolute;
+right: -2vw;
+bottom: -5vw;
+font-size: 35vw;
+font-weight: 800;
+color: rgba(255,255,255,0.02);
+line-height: 1;
+pointer-events: none;
+user-select: none;
+}
+
+/* ── SLIDE 2: PROBLEM ── */
+#s2 { background: var(--paper); padding: 80px 10vw; flex-direction: column; align-items: flex-start; }
+.slide-label {
+font-family: 'JetBrains Mono', monospace;
+font-size: 11px;
+letter-spacing: 0.25em;
+text-transform: uppercase;
+color: var(--accent);
+margin-bottom: 24px;
+}
+.slide-title {
+font-size: clamp(40px, 6vw, 80px);
+font-weight: 800;
+line-height: 1.05;
+letter-spacing: -0.03em;
+margin-bottom: 48px;
+max-width: 700px;
+}
+.pain-grid {
+display: grid;
+grid-template-columns: repeat(3, 1fr);
+gap: 20px;
+width: 100%;
+max-width: 900px;
+}
+.pain-card {
+background: var(--ink);
+color: var(--paper);
+padding: 32px 28px;
+border-radius: 3px;
+position: relative;
+overflow: hidden;
+}
+.pain-card::before {
+content: '';
+position: absolute;
+top: 0; left: 0; right: 0;
+height: 3px;
+background: var(--accent);
+}
+.pain-num {
+font-family: 'JetBrains Mono', monospace;
+font-size: 48px;
+font-weight: 300;
+color: var(--accent);
+line-height: 1;
+margin-bottom: 12px;
+}
+.pain-label {
+font-size: 13px;
+font-weight: 600;
+letter-spacing: 0.05em;
+text-transform: uppercase;
+color: #aaa;
+margin-bottom: 8px;
+}
+.pain-desc {
+font-size: 14px;
+line-height: 1.6;
+color: #ccc;
+font-weight: 400;
+}
+
+/* ── SLIDE 3: SOLUTION ── */
+#s3 { background: var(--ink); padding: 80px 10vw; flex-direction: column; align-items: flex-start; }
+#s3 .slide-title { color: var(--paper); }
+#s3 .slide-label { color: var(--accent2); }
+.solution-layout {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 48px;
+width: 100%;
+max-width: 900px;
+align-items: start;
+}
+.solution-text p {
+color: #aaa;
+font-size: 16px;
+line-height: 1.75;
+font-weight: 400;
+margin-bottom: 24px;
+}
+.solution-text strong { color: var(--accent2); font-weight: 700; }
+.feature-list { display: flex; flex-direction: column; gap: 14px; }
+.feature-item {
+display: flex;
+align-items: flex-start;
+gap: 16px;
+padding: 18px 20px;
+background: rgba(255,255,255,0.04);
+border: 1px solid rgba(255,255,255,0.07);
+border-radius: 3px;
+border-left: 3px solid var(--accent2);
+}
+.feature-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+.feature-name { font-size: 14px; font-weight: 700; color: var(--paper); margin-bottom: 4px; }
+.feature-desc { font-size: 12px; color: #777; font-weight: 400; line-height: 1.5; }
+
+/* ── SLIDE 4: HOW IT WORKS ── */
+#s4 { background: var(--paper); padding: 80px 10vw; flex-direction: column; align-items: flex-start; }
+.steps-row {
+display: flex;
+gap: 0;
+width: 100%;
+max-width: 900px;
+position: relative;
+}
+.steps-row::before {
+content: '';
+position: absolute;
+top: 28px;
+left: 28px;
+right: 28px;
+height: 2px;
+background: repeating-linear-gradient(90deg, var(--accent) 0, var(--accent) 8px, transparent 8px, transparent 16px);
+}
+.step {
+flex: 1;
+display: flex;
+flex-direction: column;
+align-items: center;
+text-align: center;
+position: relative;
+z-index: 1;
+}
+.step-circle {
+width: 56px; height: 56px;
+border-radius: 50%;
+background: var(--ink);
+color: var(--paper);
+display: flex;
+align-items: center;
+justify-content: center;
+font-family: 'JetBrains Mono', monospace;
+font-size: 18px;
+font-weight: 500;
+margin-bottom: 20px;
+flex-shrink: 0;
+border: 3px solid var(--accent);
+}
+.step:nth-child(2) .step-circle { background: var(--accent); border-color: var(--accent); }
+.step:nth-child(3) .step-circle { background: var(--accent2); border-color: var(--accent2); color: var(--ink); }
+.step:nth-child(4) .step-circle { background: #6c63ff; border-color: #6c63ff; }
+.step-title { font-size: 14px; font-weight: 700; margin-bottom: 8px; letter-spacing: 0.02em; }
+.step-body { font-size: 12px; color: var(--mid); line-height: 1.6; font-weight: 400; max-width: 140px; }
+
+.code-demo {
+margin-top: 48px;
+width: 100%;
+max-width: 900px;
+background: var(--ink);
+border-radius: 4px;
+overflow: hidden;
+}
+.code-bar {
+background: #1a1a22;
+padding: 10px 16px;
+display: flex;
+align-items: center;
+gap: 8px;
+}
+.code-dot { width: 10px; height: 10px; border-radius: 50%; }
+.code-filename {
+font-family: 'JetBrains Mono', monospace;
+font-size: 11px;
+color: #666;
+margin-left: 8px;
+letter-spacing: 0.05em;
+}
+.code-body {
+padding: 20px 24px;
+font-family: 'JetBrains Mono', monospace;
+font-size: 12px;
+line-height: 1.8;
+color: #ccc;
+}
+.c-green { color: var(--accent2); }
+.c-red { color: var(--accent); }
+.c-blue { color: #79b8ff; }
+.c-yellow { color: #ffd700; }
+.c-grey { color: #666; }
+
+/* ── SLIDE 5: DEMO ── */
+#s5 { background: #0d0d14; padding: 80px 10vw; flex-direction: column; align-items: flex-start; }
+#s5 .slide-label { color: var(--accent); }
+#s5 .slide-title { color: var(--paper); }
+.demo-grid {
+display: grid;
+grid-template-columns: 1.2fr 1fr;
+gap: 40px;
+width: 100%;
+max-width: 960px;
+}
+.browser-mock {
+background: #1a1a22;
+border-radius: 8px;
+overflow: hidden;
+border: 1px solid rgba(255,255,255,0.07);
+}
+.browser-bar {
+background: #222230;
+padding: 10px 14px;
+display: flex;
+align-items: center;
+gap: 10px;
+}
+.b-dot { width: 10px; height: 10px; border-radius: 50%; }
+.url-bar {
+flex: 1;
+background: #2a2a38;
+border-radius: 4px;
+padding: 5px 12px;
+font-family: 'JetBrains Mono', monospace;
+font-size: 11px;
+color: #888;
+margin: 0 8px;
+}
+.browser-content { padding: 24px; }
+.form-mock { display: flex; flex-direction: column; gap: 12px; }
+.form-row { display: flex; flex-direction: column; gap: 4px; }
+.form-row label { font-size: 10px; color: #666; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.1em; }
+.form-input {
+background: #2a2a38;
+border: 1px solid #333;
+border-radius: 3px;
+padding: 8px 12px;
+font-size: 12px;
+color: var(--paper);
+font-family: 'JetBrains Mono', monospace;
+position: relative;
+}
+.form-input.filled { border-color: var(--accent2); color: var(--accent2); }
+.form-input.filled::after { content: '+'; position: absolute; right: 10px; color: var(--accent2); }
+.ninja-popup {
+position: relative;
+background: #1a1a22;
+border: 1px solid rgba(255,61,46,0.3);
+border-radius: 6px;
+padding: 20px;
+display: flex;
+flex-direction: column;
+gap: 12px;
+}
+.popup-header {
+display: flex;
+align-items: center;
+gap: 10px;
+margin-bottom: 8px;
+}
+.popup-logo {
+width: 32px; height: 32px;
+background: var(--accent);
+border-radius: 6px;
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 16px;
+}
+.popup-title { font-size: 14px; font-weight: 700; color: var(--paper); }
+.popup-sub { font-size: 11px; color: var(--accent2); font-family: 'JetBrains Mono', monospace; }
+.chat-bubble {
+background: rgba(255,255,255,0.04);
+border-radius: 3px;
+padding: 10px 14px;
+font-size: 12px;
+line-height: 1.5;
+border-left: 2px solid var(--accent2);
+}
+.chat-bubble.user { border-left-color: var(--accent); color: #ccc; }
+.chat-bubble.agent { border-left-color: var(--accent2); color: var(--accent2); }
+.typing-cursor {
+display: inline-block;
+width: 6px; height: 12px;
+background: var(--accent2);
+animation: blink 0.8s step-end infinite;
+vertical-align: middle;
+margin-left: 3px;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ── SLIDE 6: TRACTION / MARKET ── */
+#s6 { background: var(--paper); padding: 80px 10vw; flex-direction: column; align-items: flex-start; }
+.metrics-grid {
+display: grid;
+grid-template-columns: repeat(3, 1fr);
+gap: 20px;
+width: 100%;
+max-width: 900px;
+margin-bottom: 40px;
+}
+.metric-card {
+padding: 36px 28px;
+background: var(--ink);
+color: var(--paper);
+border-radius: 3px;
+position: relative;
+overflow: hidden;
+}
+.metric-card::after {
+content: '';
+position: absolute;
+bottom: 0; left: 0; right: 0;
+height: 3px;
+background: linear-gradient(90deg, var(--accent), var(--accent2));
+}
+.metric-value {
+font-size: 56px;
+font-weight: 800;
+line-height: 1;
+letter-spacing: -0.04em;
+color: var(--paper);
+}
+.metric-value sup { font-size: 24px; vertical-align: super; color: var(--accent2); }
+.metric-label {
+margin-top: 12px;
+font-size: 13px;
+color: #777;
+font-weight: 400;
+line-height: 1.4;
+}
+.bar-chart { width: 100%; max-width: 900px; }
+.bar-row {
+display: flex;
+align-items: center;
+gap: 16px;
+margin-bottom: 14px;
+}
+.bar-label { font-size: 12px; color: var(--mid); width: 140px; flex-shrink: 0; font-family: 'JetBrains Mono', monospace; }
+.bar-track { flex: 1; height: 10px; background: #e8e4dc; border-radius: 2px; overflow: hidden; }
+.bar-fill {
+height: 100%;
+border-radius: 2px;
+background: var(--accent);
+transform-origin: left;
+animation: growBar 1s 0.5s both cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes growBar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.bar-val { font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--mid); width: 40px; text-align: right; }
+
+/* ── SLIDE 7: TECH STACK ── */
+#s7 { background: var(--ink); padding: 80px 10vw; flex-direction: column; align-items: flex-start; }
+#s7 .slide-label { color: var(--accent2); }
+#s7 .slide-title { color: var(--paper); }
+.tech-grid {
+display: grid;
+grid-template-columns: repeat(2, 1fr);
+gap: 20px;
+width: 100%;
+max-width: 900px;
+}
+.tech-block {
+padding: 28px;
+border: 1px solid rgba(255,255,255,0.06);
+border-radius: 3px;
+position: relative;
+}
+.tech-block-title {
+font-family: 'JetBrains Mono', monospace;
+font-size: 10px;
+letter-spacing: 0.2em;
+text-transform: uppercase;
+color: var(--accent);
+margin-bottom: 16px;
+}
+.tech-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.tech-tag {
+padding: 6px 12px;
+background: rgba(255,255,255,0.05);
+border: 1px solid rgba(255,255,255,0.08);
+border-radius: 2px;
+font-size: 12px;
+color: #ccc;
+font-family: 'JetBrains Mono', monospace;
+}
+.tech-tag.highlight { background: rgba(0,200,150,0.1); border-color: var(--accent2); color: var(--accent2); }
+.arch-note {
+margin-top: 32px;
+width: 100%;
+max-width: 900px;
+display: flex;
+gap: 16px;
+align-items: center;
+padding: 20px 24px;
+background: rgba(255,61,46,0.08);
+border-left: 3px solid var(--accent);
+border-radius: 2px;
+}
+.arch-note-icon { font-size: 22px; flex-shrink: 0; }
+.arch-note-text { font-size: 13px; color: #bbb; line-height: 1.6; }
+.arch-note-text strong { color: var(--paper); }
+
+/* ── SLIDE 8: TEAM ── */
+#s8 { background: var(--paper); padding: 80px 10vw; flex-direction: column; align-items: flex-start; }
+.team-grid {
+display: grid;
+grid-template-columns: repeat(3, 1fr);
+gap: 24px;
+width: 100%;
+max-width: 900px;
+}
+.team-card {
+padding: 28px;
+border: 1px solid var(--border);
+border-radius: 3px;
+position: relative;
+}
+.team-card::before {
+content: '';
+position: absolute;
+top: 0; left: 0;
+width: 40px; height: 3px;
+background: var(--accent);
+border-radius: 0 0 2px 0;
+}
+.team-avatar {
+width: 56px; height: 56px;
+border-radius: 50%;
+background: var(--ink);
+color: var(--paper);
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 22px;
+margin-bottom: 16px;
+}
+.team-name { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.team-role {
+font-family: 'JetBrains Mono', monospace;
+font-size: 10px;
+color: var(--accent);
+letter-spacing: 0.15em;
+text-transform: uppercase;
+margin-bottom: 12px;
+}
+.team-bio { font-size: 13px; color: var(--mid); line-height: 1.6; font-weight: 400; }
+
+/* ── SLIDE 9: ASK / CTA ── */
+#s9 {
+background: var(--ink);
+flex-direction: column;
+align-items: flex-start;
+padding: 80px 10vw;
+}
+#s9 .slide-label { color: var(--accent2); }
+.ask-title {
+font-size: clamp(48px, 8vw, 100px);
+font-weight: 800;
+line-height: 0.95;
+letter-spacing: -0.04em;
+color: var(--paper);
+margin-bottom: 48px;
+max-width: 700px;
+}
+.ask-title span { color: var(--accent); }
+.ask-grid {
+display: grid;
+grid-template-columns: repeat(3, 1fr);
+gap: 20px;
+width: 100%;
+max-width: 900px;
+margin-bottom: 48px;
+}
+.ask-card {
+padding: 28px;
+background: rgba(255,255,255,0.04);
+border: 1px solid rgba(255,255,255,0.06);
+border-radius: 3px;
+}
+.ask-amount {
+font-size: 36px;
+font-weight: 800;
+color: var(--accent2);
+letter-spacing: -0.03em;
+margin-bottom: 8px;
+}
+.ask-for { font-size: 13px; color: var(--paper); font-weight: 600; margin-bottom: 6px; }
+.ask-desc { font-size: 12px; color: #666; line-height: 1.5; font-weight: 400; }
+.contact-row {
+display: flex;
+align-items: center;
+gap: 32px;
+}
+.contact-item {
+display: flex;
+align-items: center;
+gap: 10px;
+font-family: 'JetBrains Mono', monospace;
+font-size: 13px;
+color: #888;
+}
+.contact-item .contact-key {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  min-width: 36px;
+}
+.feature-icon svg { display: block; }
+.popup-logo span { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; }
+
+/* Animations */
+@keyframes fadeUp {
+from { opacity: 0; transform: translateY(20px); }
+to { opacity: 1; transform: translateY(0); }
+}
+
+.reveal {
+opacity: 0;
+transform: translateY(24px);
+transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.reveal.visible { opacity: 1; transform: translateY(0); }
+.reveal-delay-1 { transition-delay: 0.1s; }
+.reveal-delay-2 { transition-delay: 0.2s; }
+.reveal-delay-3 { transition-delay: 0.3s; }
+.reveal-delay-4 { transition-delay: 0.4s; }
+.reveal-delay-5 { transition-delay: 0.5s; }
+</style>
+
+</head>
+<body>
+
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+
+<nav class="nav-dots" id="navDots">
+  <div class="nav-dot active" onclick="goTo(0)"></div>
+  <div class="nav-dot" onclick="goTo(1)"></div>
+  <div class="nav-dot" onclick="goTo(2)"></div>
+  <div class="nav-dot" onclick="goTo(3)"></div>
+  <div class="nav-dot" onclick="goTo(4)"></div>
+  <div class="nav-dot" onclick="goTo(5)"></div>
+  <div class="nav-dot" onclick="goTo(6)"></div>
+  <div class="nav-dot" onclick="goTo(7)"></div>
+  <div class="nav-dot" onclick="goTo(8)"></div>
+</nav>
+
+<div class="slide-num" id="slideNum">01 / 09</div>
+
+<!-- SLIDE 1: TITLE -->
+
+<section class="slide" id="s1">
+  <div class="grid-bg"></div>
+  <div class="big-num">F</div>
+  <div class="tag-line">Hackathon 2025 · Browser Extension · AI Agent</div>
+  <div class="hero-title">Fill<span>Ninja</span></div>
+  <div class="hero-sub">The agentic AI that reads any web form and fills it for you — instantly, intelligently, autonomously.</div>
+  <div class="hero-badge">Shipped in 48 hours</div>
+</section>
+
+<!-- SLIDE 2: PROBLEM -->
+
+<section class="slide" id="s2">
+  <div class="slide-label reveal">The Problem</div>
+  <div class="slide-title reveal reveal-delay-1">Filling forms is<br><u>wasted human time.</u></div>
+  <div class="pain-grid">
+    <div class="pain-card reveal reveal-delay-2">
+      <div class="pain-num">11</div>
+      <div class="pain-label">Minutes</div>
+      <div class="pain-desc">Average time spent filling a single multi-step web form from scratch</div>
+    </div>
+    <div class="pain-card reveal reveal-delay-3">
+      <div class="pain-num">40%</div>
+      <div class="pain-label">Abandonment</div>
+      <div class="pain-desc">Of web forms are abandoned before completion due to friction and repetition</div>
+    </div>
+    <div class="pain-card reveal reveal-delay-4">
+      <div class="pain-num">∞</div>
+      <div class="pain-label">Repetition</div>
+      <div class="pain-desc">Same data entered over and over: name, email, address, credentials — endlessly</div>
+    </div>
+  </div>
+</section>
+
+<!-- SLIDE 3: SOLUTION -->
+
+<section class="slide" id="s3">
+  <div class="slide-label reveal">The Solution</div>
+  <div class="slide-title reveal reveal-delay-1">Meet FillNinja.</div>
+  <div class="solution-layout">
+    <div class="solution-text reveal reveal-delay-2">
+      <p>FillNinja is a <strong>browser extension powered by an AI agent</strong> that understands any form on the web — its fields, labels, context, and intent.</p>
+      <p>Tell it what to do in plain language. It handles the rest: reading the DOM, mapping fields, filling values, and even submitting — all autonomously.</p>
+    </div>
+    <div class="feature-list">
+      <div class="feature-item reveal reveal-delay-2">
+        <div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M20 20l-3.5-3.5"/></svg></div>
+        <div>
+          <div class="feature-name">Intelligent DOM Scanning</div>
+          <div class="feature-desc">Reads every form field, label, and context on the page via content script</div>
+        </div>
+      </div>
+      <div class="feature-item reveal reveal-delay-3">
+        <div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="7" width="14" height="10" rx="2"/><path d="M9 11h6M9 14h4"/></svg></div>
+        <div>
+          <div class="feature-name">Natural Language Tasks</div>
+          <div class="feature-desc">"Fill the contact form as John Doe, engineer at Acme Corp" — done</div>
+        </div>
+      </div>
+      <div class="feature-item reveal reveal-delay-4">
+        <div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z"/></svg></div>
+        <div>
+          <div class="feature-name">Agentic Action Loop</div>
+          <div class="feature-desc">AG2 multi-agent backend plans, executes, and verifies each step</div>
+        </div>
+      </div>
+      <div class="feature-item reveal reveal-delay-5">
+        <div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+        <div>
+          <div class="feature-name">Privacy-First Design</div>
+          <div class="feature-desc">Your data stays local. Only field metadata sent to the agent — never your values</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SLIDE 4: HOW IT WORKS -->
+
+<section class="slide" id="s4">
+  <div class="slide-label reveal">How It Works</div>
+  <div class="slide-title reveal reveal-delay-1">4 steps. Zero effort.</div>
+  <div class="steps-row">
+    <div class="step reveal reveal-delay-1">
+      <div class="step-circle">01</div>
+      <div class="step-title">Scan</div>
+      <div class="step-body">Content script captures full DOM snapshot: fields, labels, buttons</div>
+    </div>
+    <div class="step reveal reveal-delay-2">
+      <div class="step-circle">02</div>
+      <div class="step-title">Instruct</div>
+      <div class="step-body">You type a plain-language task in the popup overlay</div>
+    </div>
+    <div class="step reveal reveal-delay-3">
+      <div class="step-circle">03</div>
+      <div class="step-title">Plan</div>
+      <div class="step-body">AG2 agent reasons over the form structure and creates an action plan</div>
+    </div>
+    <div class="step reveal reveal-delay-4">
+      <div class="step-circle">04</div>
+      <div class="step-title">Execute</div>
+      <div class="step-body">Background script fires fills, clicks, and scrolls — live on your page</div>
+    </div>
+  </div>
+  <div class="code-demo reveal reveal-delay-2">
+    <div class="code-bar">
+      <div class="code-dot" style="background:#ff5f57"></div>
+      <div class="code-dot" style="background:#ffbd2e"></div>
+      <div class="code-dot" style="background:#28c840"></div>
+      <span class="code-filename">content.js — DOM Action Executor</span>
+    </div>
+    <div class="code-body">
+      <span class="c-grey">// Agent sends action → content script executes on live page</span><br>
+      <span class="c-blue">case</span> <span class="c-yellow">'FILL'</span>: result = <span class="c-blue">await</span> interactor.<span class="c-green">fill</span>(selector, value);<br>
+      <span class="c-blue">case</span> <span class="c-yellow">'CLICK'</span>: result = <span class="c-blue">await</span> interactor.<span class="c-green">click</span>(selector);<br>
+      <span class="c-blue">case</span> <span class="c-yellow">'SELECT'</span>: result = <span class="c-blue">await</span> interactor.<span class="c-green">select</span>(selector, optionText);<br>
+      <span class="c-grey">// Highlights element, scrolls into view, fires real DOM events</span>
+    </div>
+  </div>
+</section>
+
+<!-- SLIDE 5: DEMO -->
+
+<section class="slide" id="s5">
+  <div class="slide-label reveal">Live Demo</div>
+  <div class="slide-title reveal reveal-delay-1">Watch it fill.</div>
+  <div class="demo-grid">
+    <div class="browser-mock reveal reveal-delay-2">
+      <div class="browser-bar">
+        <div class="b-dot" style="background:#ff5f57"></div>
+        <div class="b-dot" style="background:#ffbd2e"></div>
+        <div class="b-dot" style="background:#28c840"></div>
+        <div class="url-bar">acme-careers.io/apply</div>
+      </div>
+      <div class="browser-content">
+        <div class="form-mock">
+          <div class="form-row">
+            <label>Full Name</label>
+            <div class="form-input filled">Jane Nguyen</div>
+          </div>
+          <div class="form-row">
+            <label>Email</label>
+            <div class="form-input filled">jane@example.com</div>
+          </div>
+          <div class="form-row">
+            <label>Role</label>
+            <div class="form-input filled">Senior Engineer</div>
+          </div>
+          <div class="form-row">
+            <label>Cover Letter</label>
+            <div class="form-input" style="min-height:60px; color:#555; font-size:11px; padding:10px 12px; border-color:#444">I am excited to apply for...<span class="typing-cursor"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ninja-popup reveal reveal-delay-3">
+      <div class="popup-header">
+        <div class="popup-logo"><span>FN</span></div>
+        <div>
+          <div class="popup-title">FillNinja</div>
+          <div class="popup-sub">● AGENT ACTIVE</div>
+        </div>
+      </div>
+      <div class="chat-bubble user">Fill this job application as Jane Nguyen, senior engineer</div>
+      <div class="chat-bubble agent">Scanned 6 form fields<br>Filled Name, Email, Role<br>Writing cover letter…</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#555;font-family:'JetBrains Mono',monospace">
+          <span style="color:var(--accent2)">ACTION</span> fill #name → "Jane Nguyen"
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#555;font-family:'JetBrains Mono',monospace">
+          <span style="color:var(--accent2)">ACTION</span> fill #email → "jane@example.com"
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#555;font-family:'JetBrains Mono',monospace">
+          <span style="color:var(--accent2)">ACTION</span> fill #role → "Senior Engineer"
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--accent);font-family:'JetBrains Mono',monospace">
+          <span style="color:var(--accent)">PENDING</span> generate cover_letter…
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SLIDE 6: MARKET -->
+
+<section class="slide" id="s6">
+  <div class="slide-label reveal">Market Opportunity</div>
+  <div class="slide-title reveal reveal-delay-1">The numbers<br>are massive.</div>
+  <div class="metrics-grid">
+    <div class="metric-card reveal reveal-delay-2">
+      <div class="metric-value">4.9<sup>B</sup></div>
+      <div class="metric-label">Internet users globally who interact with web forms daily</div>
+    </div>
+    <div class="metric-card reveal reveal-delay-3">
+      <div class="metric-value">$12<sup>B</sup></div>
+      <div class="metric-label">Browser productivity extension market by 2027 (CAGR 18%)</div>
+    </div>
+    <div class="metric-card reveal reveal-delay-4">
+      <div class="metric-value">83<sup>M</sup></div>
+      <div class="metric-label">Chrome extensions installed daily across enterprise & consumer users</div>
+    </div>
+  </div>
+  <div class="bar-chart reveal reveal-delay-3">
+    <div class="bar-row">
+      <div class="bar-label">Job Applications</div>
+      <div class="bar-track"><div class="bar-fill" style="width:88%"></div></div>
+      <div class="bar-val">88%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Checkout Forms</div>
+      <div class="bar-track"><div class="bar-fill" style="width:74%; background:var(--accent2)"></div></div>
+      <div class="bar-val">74%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Gov / Tax Forms</div>
+      <div class="bar-track"><div class="bar-fill" style="width:61%; background:#6c63ff"></div></div>
+      <div class="bar-val">61%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Lead Gen Forms</div>
+      <div class="bar-track"><div class="bar-fill" style="width:52%; background:#ffd700"></div></div>
+      <div class="bar-val">52%</div>
+    </div>
+  </div>
+</section>
+
+<!-- SLIDE 7: TECH -->
+
+<section class="slide" id="s7">
+  <div class="slide-label reveal">Technology</div>
+  <div class="slide-title reveal reveal-delay-1">Built on real<br>agentic infra.</div>
+  <div class="tech-grid">
+    <div class="tech-block reveal reveal-delay-2">
+      <div class="tech-block-title">// Browser Extension</div>
+      <div class="tech-tags">
+        <span class="tech-tag highlight">Manifest V3</span>
+        <span class="tech-tag">Service Worker</span>
+        <span class="tech-tag">Content Scripts</span>
+        <span class="tech-tag">Chrome Storage API</span>
+        <span class="tech-tag">EventSource SSE</span>
+      </div>
+    </div>
+    <div class="tech-block reveal reveal-delay-3">
+      <div class="tech-block-title">// AI Agent Backend</div>
+      <div class="tech-tags">
+        <span class="tech-tag highlight">AG2 Framework</span>
+        <span class="tech-tag">FastAPI</span>
+        <span class="tech-tag">Claude / GPT-4o</span>
+        <span class="tech-tag">SSE Streaming</span>
+        <span class="tech-tag">Python 3.11</span>
+      </div>
+    </div>
+    <div class="tech-block reveal reveal-delay-3">
+      <div class="tech-block-title">// DOM Intelligence</div>
+      <div class="tech-tags">
+        <span class="tech-tag highlight">Semantic Field Mapping</span>
+        <span class="tech-tag">MutationObserver</span>
+        <span class="tech-tag">ARIA Label Parsing</span>
+        <span class="tech-tag">Visibility Detection</span>
+      </div>
+    </div>
+    <div class="tech-block reveal reveal-delay-4">
+      <div class="tech-block-title">// Agent Architecture</div>
+      <div class="tech-tags">
+        <span class="tech-tag highlight">Planner + Executor</span>
+        <span class="tech-tag">Tool Use Loop</span>
+        <span class="tech-tag">Action Result Feedback</span>
+        <span class="tech-tag">Error Recovery</span>
+      </div>
+    </div>
+  </div>
+  <div class="arch-note reveal reveal-delay-4">
+    <div class="arch-note-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 13a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1M14 11a5 5 0 0 1 0 7l-1 1a5 5 0 0 1-7-7l1-1"/></svg></div>
+    <div class="arch-note-text"><strong>Extension ↔️ Background ↔️ Python Agent:</strong> Real-time bidirectional loop. The agent plans in Python, streams actions to the background worker, which executes them in the live DOM and feeds results back — all in under 500ms per step.</div>
+  </div>
+</section>
+
+<!-- SLIDE 8: TEAM -->
+
+<section class="slide" id="s8">
+  <div class="slide-label reveal">The Team</div>
+  <div class="slide-title reveal reveal-delay-1">Built by builders.</div>
+  <div class="team-grid">
+    <div class="team-card reveal reveal-delay-2">
+      <div class="team-avatar">TL</div>
+      <div class="team-name">You / Team Lead</div>
+      <div class="team-role">Extension · Agent Arch</div>
+      <div class="team-bio">Full-stack + AI infra. Designed the AG2 action loop and Chrome extension plumbing.</div>
+    </div>
+    <div class="team-card reveal reveal-delay-3">
+      <div class="team-avatar">BE</div>
+      <div class="team-name">Team Member 2</div>
+      <div class="team-role">Backend · API Design</div>
+      <div class="team-bio">FastAPI server, SSE streaming, agent task management, and error recovery logic.</div>
+    </div>
+    <div class="team-card reveal reveal-delay-4">
+      <div class="team-avatar">UX</div>
+      <div class="team-name">Team Member 3</div>
+      <div class="team-role">UI · Product Design</div>
+      <div class="team-bio">Popup UX, activity logs, quick-action shortcuts, and the FillNinja brand identity.</div>
+    </div>
+  </div>
+</section>
+
+<!-- SLIDE 9: ASK / CTA -->
+
+<section class="slide" id="s9">
+  <div class="slide-label reveal">The Ask</div>
+  <div class="ask-title reveal reveal-delay-1">Let's give forms<br>to the <span>ninjas.</span></div>
+  <div class="ask-grid">
+    <div class="ask-card reveal reveal-delay-2">
+      <div class="ask-amount">01</div>
+      <div class="ask-for">Win the Hackathon</div>
+      <div class="ask-desc">Help us get FillNinja in front of 10M Chrome users and ship it as a real product</div>
+    </div>
+    <div class="ask-card reveal reveal-delay-3">
+      <div class="ask-amount">30</div>
+      <div class="ask-for">Next 30 Days</div>
+      <div class="ask-desc">Chrome Web Store launch, hosted backend, user auth, and smart profile sync</div>
+    </div>
+    <div class="ask-card reveal reveal-delay-4">
+      <div class="ask-amount">Go</div>
+      <div class="ask-for">Vision</div>
+      <div class="ask-desc">The default agentic layer on every browser — no form goes unfilled</div>
+    </div>
+  </div>
+  <div class="contact-row reveal reveal-delay-4">
+    <div class="contact-item">
+      <span class="contact-key">web</span>
+      <span>fillninja.dev</span>
+    </div>
+    <div class="contact-item">
+      <span class="contact-key">email</span>
+      <span>team@fillninja.dev</span>
+    </div>
+    <div class="contact-item">
+      <span class="contact-key">git</span>
+      <span>github.com/fillninja</span>
+    </div>
+  </div>
+</section>
+
+<script>
+  // Custom cursor
+  const cursor = document.getElementById('cursor');
+  const ring = document.getElementById('cursorRing');
+  let mx = 0, my = 0, rx = 0, ry = 0;
+  document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+  function animCursor() {
+    cursor.style.left = mx - 5 + 'px';
+    cursor.style.top = my - 5 + 'px';
+    rx += (mx - rx) * 0.15;
+    ry += (my - ry) * 0.15;
+    ring.style.left = rx - 18 + 'px';
+    ring.style.top = ry - 18 + 'px';
+    requestAnimationFrame(animCursor);
+  }
+  animCursor();
+
+  // Slide tracking
+  const slides = document.querySelectorAll('.slide');
+  const dots = document.querySelectorAll('.nav-dot');
+  const numEl = document.getElementById('slideNum');
+  let current = 0;
+
+  function updateSlide(idx) {
+    current = idx;
+    dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+    numEl.textContent = String(idx + 1).padStart(2, '0') + ' / ' + String(slides.length).padStart(2, '0');
+  }
+
+  function goTo(idx) {
+    slides[idx].scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // Intersection observer for slide tracking
+  const slideObserver = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.intersectionRatio > 0.5) {
+        const idx = Array.from(slides).indexOf(e.target);
+        updateSlide(idx);
+      }
+    });
+  }, { threshold: 0.5 });
+  slides.forEach(s => slideObserver.observe(s));
+
+  // Reveal animations
+  const revealObserver = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) e.target.classList.add('visible');
+    });
+  }, { threshold: 0.15 });
+  document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+  // Keyboard nav
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') goTo(Math.min(current + 1, slides.length - 1));
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') goTo(Math.max(current - 1, 0));
+  });
+</script>
+
+</body>
+</html>
