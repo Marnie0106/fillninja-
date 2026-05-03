@@ -330,7 +330,7 @@
     <div class="container">
         <div class="header">
             <h1>FillNinja Agent</h1>
-            <p>AI-powered web automation</p>
+            <p>Discovery to parallel fill — multi-agent pipeline</p>
         </div>
 
         <div class="status-bar">
@@ -371,10 +371,28 @@ Examples:
                 <div class="button-group">
                     <button class="btn-primary" id="runBtn">
                         <span class="spinner"></span>
-                        <span class="btn-text">Run Agent</span>
+                        <span class="btn-text">Run on this tab</span>
                     </button>
                     <button class="btn-secondary" id="stopBtn" disabled>Stop</button>
                 </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Autonomous pipeline</div>
+                <p class="hint" style="font-size:12px;color:#666;margin-bottom:8px;line-height:1.4">
+                    Searches the web for matching application pages, then opens tabs and runs parallel fill agents (planner + reviewer each tab).
+                </p>
+                <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                    <label style="font-size:11px;color:#555">Max forms
+                        <input type="number" id="maxFormsInput" value="6" min="1" max="20" style="width:48px;margin-left:4px;padding:4px">
+                    </label>
+                    <label style="font-size:11px;color:#555">Parallel tabs
+                        <input type="number" id="maxParallelInput" value="2" min="1" max="6" style="width:48px;margin-left:4px;padding:4px">
+                    </label>
+                </div>
+                <button class="btn-primary" id="pipelineBtn" type="button">
+                    <span class="btn-text">Discover + fill (pipeline)</span>
+                </button>
             </div>
 
             <!-- Logs -->

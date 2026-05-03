@@ -1,6 +1,9 @@
 # FillNinja
 
-Browser extension (Manifest V3) plus a **local FastAPI service** that runs an **[AG2](https://github.com/ag2ai/ag2) `beta.Agent`** to plan browser actions from the DOM and stream them to the extension over SSE.
+Browser extension (Manifest V3) plus a **local FastAPI service** with an **[AG2](https://github.com/ag2ai/ag2) multi-agent** pipeline:
+
+- **Search Curator** — `ddgs` (DuckDuckGo) live search + `PromptedSchema(DiscoveryResult)` to shortlist real application pages.
+- **Fill agents** (per tab) — planner + optional reviewer, with **parallel runs** across tabs.
 
 ## Prerequisites
 
@@ -21,7 +24,7 @@ export OPENROUTER_API_KEY="sk-or-v1-..."   # OpenRouter; see .env.example for mo
 python3 -m uvicorn server.main:app --host 127.0.0.1 --port 8000
 ```
 
-Check [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health) — it should return `{"status":"ok"}`.
+Check [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health) — JSON describes pipeline + AG2 roles.
 
 Defaults match the **build-with-ag2** quickstart: `base_url=https://openrouter.ai/api/v1`, `model=google/gemini-2.5-flash`. Override with `OPENROUTER_MODEL`, `OPENROUTER_BASE_URL`, and `OPENROUTER_MAX_COMPLETION_TOKENS` if needed.
 
@@ -35,19 +38,30 @@ The extension uses `http://localhost:8000` by default (same machine).
 
 ## Use it
 
-1. Start the API server (above).
-2. Pin the extension, open a page with a form (or any page for navigation tasks).
-3. Open the popup: status should show **Connected to FillNinja backend**.
-4. Enter a task (e.g. “Fill the contact form with name Jane Doe, email jane@example.com”) and run.
+### Single tab
 
-**Privacy:** Your task text, page URL, and DOM snapshot are sent to the configured model endpoint to plan actions. Review sensitive pages before running.
+1. Start the API server (above).
+2. Open the target page, open the popup (connected).
+3. Enter a task and **Run on this tab**.
+
+### Pipeline (discover + parallel fill)
+
+1. Enter a **goal** (e.g. “CS scholarships for US high school seniors”).
+2. Set **Max forms** and **Parallel tabs** in the popup.
+3. **Discover + fill (pipeline)** — server runs `POST /pipeline/discover` (search + curator); extension opens tabs and starts one fill agent per URL (batched).
+
+**Responsible use:** Respect site terms; use demo data; review URLs before mass automation.
+
+**Privacy:** Objectives, snippets, URLs, and DOM snapshots go to your LLM endpoint(s).
 
 ## Repo layout
 
 | Path | Purpose |
 |------|---------|
 | `browser-agent-extension/` | Chrome extension (popup, service worker, content script). |
-| `server/main.py` | FastAPI + **two** AG2 `Agent`s (planner + reviewer), `PromptedSchema` JSON output, shared `OpenAIConfig`. Set `FILLNINJA_ENABLE_REVIEWER=0` for planner only. |
+| `server/main.py` | FastAPI: `/agent/*`, `/pipeline/discover`, fill loop (planner + reviewer). |
+| `server/discovery.py` | `ddgs` search + AG2 curator (`PromptedSchema(DiscoveryResult)`). |
+| `server/llm.py` | Shared `OpenAIConfig` for OpenRouter. |
 | `fillninja-pitch-deck.html` | Single-file pitch deck. |
 | `scripts/generate_icons.py` | Optional: regenerate `icons/*.png` with Pillow. |
 

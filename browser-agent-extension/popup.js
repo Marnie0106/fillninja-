@@ -11,9 +11,14 @@ class PopupController {
         this.statusDot = document.getElementById('statusDot');
         this.statusText = document.getElementById('statusText');
         this.quickActionBtns = document.querySelectorAll('.quick-action-btn');
+        this.pipelineBtn = document.getElementById('pipelineBtn');
+        this.maxFormsInput = document.getElementById('maxFormsInput');
+        this.maxParallelInput = document.getElementById('maxParallelInput');
 
         this.isRunning = false;
         this.logs = [];
+        this.pipelineTotal = 0;
+        this.pipelineDone = 0;
 
         this.init();
     }
@@ -48,6 +53,8 @@ class PopupController {
                 this.runAgent();
             });
         });
+
+        this.pipelineBtn.addEventListener('click', () => this.runPipeline());
 
         // Listen for messages from background script
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -106,7 +113,7 @@ class PopupController {
                 throw new Error(response?.error || 'Failed to start agent');
             }
 
-            this.addLog('Agent started successfully', 'system');
+            this.addLog('Agent started on this tab', 'system');
         } catch (error) {
             this.addLog(`Error: ${error.message}`, 'error');
             this.isRunning = false;
@@ -114,15 +121,78 @@ class PopupController {
         }
     }
 
+    async runPipeline() {
+        const objective = this.taskInput.value.trim();
+        if (!objective) {
+            this.addLog('Enter an objective (e.g. computer science scholarships for high school seniors)', 'error');
+            return;
+        }
+
+        const maxForms = parseInt(this.maxFormsInput.value, 10) || 6;
+        const maxParallel = parseInt(this.maxParallelInput.value, 10) || 2;
+
+        this.isRunning = true;
+        this.pipelineTotal = 0;
+        this.pipelineDone = 0;
+        this.updateUIState();
+        this.addLog(`Pipeline: discovering forms for — ${objective}`, 'user');
+
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: 'RUN_PIPELINE',
+                objective,
+                maxForms,
+                maxParallel
+            });
+
+            if (!response || !response.success) {
+                throw new Error(response?.error || 'Pipeline failed to start');
+            }
+
+            this.pipelineTotal = response.started || 0;
+            this.pipelineDone = 0;
+
+            if (this.pipelineTotal === 0) {
+                this.addLog('Pipeline: no forms to fill (curator returned empty)', 'system');
+                this.isRunning = false;
+                this.updateUIState();
+                return;
+            }
+
+            this.addLog(`${this.pipelineTotal} fill agent(s) running in parallel batches`, 'system');
+        } catch (error) {
+            this.addLog(`Error: ${error.message}`, 'error');
+            this.isRunning = false;
+            this.pipelineTotal = 0;
+            this.pipelineDone = 0;
+            this.updateUIState();
+        }
+    }
+
+    pipelineMaybeFinish() {
+        if (this.pipelineTotal <= 0) {
+            return;
+        }
+        this.pipelineDone++;
+        if (this.pipelineDone >= this.pipelineTotal) {
+            this.addLog('Pipeline: all tab tasks finished', 'system');
+            this.pipelineTotal = 0;
+            this.pipelineDone = 0;
+            this.isRunning = false;
+        }
+    }
+
     async stopAgent() {
         try {
             await chrome.runtime.sendMessage({ type: 'STOP_AGENT' });
-            this.addLog('Agent stopped by user', 'system');
+            this.addLog('Stop requested (all active tasks)', 'system');
         } catch (error) {
             this.addLog(`Error stopping agent: ${error.message}`, 'error');
         }
 
         this.isRunning = false;
+        this.pipelineTotal = 0;
+        this.pipelineDone = 0;
         this.updateUIState();
     }
 
@@ -130,11 +200,13 @@ class PopupController {
         if (this.isRunning) {
             this.runBtn.disabled = true;
             this.runBtn.classList.add('loading');
+            this.pipelineBtn.disabled = true;
             this.stopBtn.disabled = false;
             this.taskInput.disabled = true;
         } else {
             this.runBtn.disabled = false;
             this.runBtn.classList.remove('loading');
+            this.pipelineBtn.disabled = false;
             this.stopBtn.disabled = true;
             this.taskInput.disabled = false;
         }
@@ -146,14 +218,22 @@ class PopupController {
                 this.addLog(message.content, message.logType);
                 break;
             case 'AGENT_COMPLETE':
-                this.isRunning = false;
+                this.addLog('Tab task completed', 'system');
+                if (this.pipelineTotal > 0) {
+                    this.pipelineMaybeFinish();
+                } else {
+                    this.isRunning = false;
+                }
                 this.updateUIState();
-                this.addLog('Task completed successfully', 'system');
                 break;
             case 'AGENT_ERROR':
-                this.isRunning = false;
-                this.updateUIState();
                 this.addLog(`Agent error: ${message.error}`, 'error');
+                if (this.pipelineTotal > 0) {
+                    this.pipelineMaybeFinish();
+                } else {
+                    this.isRunning = false;
+                }
+                this.updateUIState();
                 break;
             case 'ACTION_EXECUTED':
                 this.addLog(`Action: ${message.action}`, 'action');

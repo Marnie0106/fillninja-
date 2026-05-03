@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "FillNinja Agent",
-  "version": "1.0.1",
-  "description": "FillNinja: AI-planned form fill and browser actions via local FastAPI agent",
+  "version": "1.1.0",
+  "description": "FillNinja: AG2 discovery + parallel tab fills via local FastAPI",
   "permissions": [
     "activeTab",
     "scripting",

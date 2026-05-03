@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FillNinja test form</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 420px; margin: 40px auto; padding: 0 16px; }
+    label { display: block; margin-top: 14px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #555; }
+    input, textarea, select { width: 100%; margin-top: 4px; padding: 8px 10px; box-sizing: border-box; }
+    button { margin-top: 20px; padding: 10px 18px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Contact (local test)</h1>
+  <p>Use this page to try FillNinja. Sample task: fill with Name = <strong>Jane Tester</strong>, Email = <strong>jane@example.com</strong>, Message = <strong>Hello</strong>.</p>
+
+  <form id="contact-form" action="#" method="get">
+    <label for="full-name">Full name</label>
+    <input id="full-name" name="name" type="text" placeholder="Your name" autocomplete="name">
+
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" placeholder="you@example.com" autocomplete="email">
+
+    <label for="role">Role</label>
+    <select id="role" name="role">
+      <option value="">Choose one</option>
+      <option value="eng">Engineer</option>
+      <option value="design">Designer</option>
+      <option value="pm">Product</option>
+    </select>
+
+    <label for="message">Message</label>
+    <textarea id="message" name="message" rows="4" placeholder="Your message"></textarea>
+
+    <button type="submit">Submit</button>
+  </form>
+</body>
+</html>

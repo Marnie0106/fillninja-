@@ -13,6 +13,9 @@ from pydantic import BaseModel, Field, ValidationError
 from autogen.beta import Agent, PromptedSchema
 from autogen.beta.config import OpenAIConfig
 
+from server.discovery import run_discovery
+from server.llm import build_llm_config
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="FillNinja Agent API", version="1.0.0")
@@ -39,7 +42,7 @@ async def root() -> str:
   <li><a href="/docs">GET /docs</a> &mdash; interactive API (Swagger UI)</li>
 </ul>
 <p>Use the Chrome extension against <code>http://localhost:8000</code> (same as this host).</p>
-<p>AG2: two agents (planner + reviewer); set <code>FILLNINJA_ENABLE_REVIEWER=0</code> to disable the reviewer.</p>
+<p>Autonomous pipeline: <code>POST /pipeline/discover</code> then parallel fills from the extension.</p>
 </body>
 </html>"""
 
@@ -99,6 +102,11 @@ class ReviewOutput(BaseModel):
     reason: str = ""
 
 
+class DiscoverRequest(BaseModel):
+    objective: str
+    max_forms: int = 8
+
+
 class AgentTask:
     def __init__(self, task_id: str) -> None:
         self.task_id = task_id
@@ -135,40 +143,6 @@ def truncate_snapshot(snap: dict[str, Any], max_chars: int = 24000) -> str:
     if len(text) <= max_chars:
         return text
     return text[:max_chars] + "\n... [truncated]"
-
-
-def _openrouter_headers() -> dict[str, str]:
-    referer = os.environ.get("OPENROUTER_HTTP_REFERER")
-    title = os.environ.get("OPENROUTER_APP_TITLE", "FillNinja")
-    headers: dict[str, str] = {"X-Title": title}
-    if referer:
-        headers["HTTP-Referer"] = referer
-    return headers
-
-
-def llm_api_key() -> str:
-    key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
-    if not key:
-        raise RuntimeError(
-            "Set OPENROUTER_API_KEY (OpenRouter) or OPENAI_API_KEY in the environment"
-        )
-    return key
-
-
-def build_llm_config() -> OpenAIConfig:
-    return OpenAIConfig(
-        model=os.environ.get("OPENROUTER_MODEL", "google/gemini-2.5-flash"),
-        streaming=False,
-        api_key=llm_api_key(),
-        base_url=os.environ.get(
-            "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
-        ),
-        max_completion_tokens=int(
-            os.environ.get("OPENROUTER_MAX_COMPLETION_TOKENS", "1024")
-        ),
-        temperature=0.2,
-        default_headers=_openrouter_headers(),
-    )
 
 
 def build_planner_agent(config: OpenAIConfig) -> Agent:
@@ -366,13 +340,36 @@ async def run_agent_task(
 async def health() -> dict[str, Any]:
     return {
         "status": "ok",
+        "pipeline": {
+            "discover": "POST /pipeline/discover",
+            "search": "ddgs (DuckDuckGo) + AG2 curator agent",
+        },
         "ag2": {
             "planner": "autogen.beta.Agent + PromptedSchema(PlannerOutput)",
             "reviewer": "autogen.beta.Agent + PromptedSchema(ReviewOutput)"
             if reviewer_enabled()
             else "disabled",
+            "curator": "autogen.beta.Agent + PromptedSchema(DiscoveryResult)",
         },
     }
+
+
+@app.post("/pipeline/discover")
+async def pipeline_discover(body: DiscoverRequest) -> dict[str, Any]:
+    if not (
+        os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="OPENROUTER_API_KEY (or OPENAI_API_KEY) is not configured on the server",
+        )
+    try:
+        result = await run_discovery(body.objective, body.max_forms)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return result.model_dump()
 
 
 @app.post("/agent/run")

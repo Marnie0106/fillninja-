@@ -713,7 +713,7 @@ transition: opacity 0.6s ease, transform 0.6s ease;
   <div class="big-num">F</div>
   <div class="tag-line">Hackathon 2025 · Browser Extension · AI Agent</div>
   <div class="hero-title">Fill<span>Ninja</span></div>
-  <div class="hero-sub">The agentic AI that reads any web form and fills it for you — instantly, intelligently, autonomously.</div>
+  <div class="hero-sub">An <strong>autonomous application engine</strong>: multi-agent AG2 pipeline that <em>discovers</em> real forms on the web (scholarships, grants, jobs, surveys) and <em>fills them in parallel</em> across tabs — not just “help me with this page.”</div>
   <div class="hero-badge">Shipped in 48 hours</div>
 </section>
 
@@ -748,8 +748,8 @@ transition: opacity 0.6s ease, transform 0.6s ease;
   <div class="slide-title reveal reveal-delay-1">Meet FillNinja.</div>
   <div class="solution-layout">
     <div class="solution-text reveal reveal-delay-2">
-      <p>FillNinja is a <strong>browser extension powered by an AI agent</strong> that understands any form on the web — its fields, labels, context, and intent.</p>
-      <p>Tell it what to do in plain language. It handles the rest: reading the DOM, mapping fields, filling values, and even submitting — all autonomously.</p>
+      <p>FillNinja is a <strong>Chrome extension + AG2 backend</strong> with distinct agents: a <strong>Search Curator</strong> that finds relevant application URLs from the open web, and <strong>Fill agents</strong> (planner + safety reviewer per tab) that execute in parallel.</p>
+      <p>Your pitch shifts from “autofill this form” to <strong>“I want 20 scholarships — go find them and complete them.”</strong> Discovery, orchestration, and execution are one workflow.</p>
     </div>
     <div class="feature-list">
       <div class="feature-item reveal reveal-delay-2">
@@ -762,15 +762,15 @@ transition: opacity 0.6s ease, transform 0.6s ease;
       <div class="feature-item reveal reveal-delay-3">
         <div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="7" width="14" height="10" rx="2"/><path d="M9 11h6M9 14h4"/></svg></div>
         <div>
-          <div class="feature-name">Natural Language Tasks</div>
-          <div class="feature-desc">"Fill the contact form as John Doe, engineer at Acme Corp" — done</div>
+          <div class="feature-name">Web discovery</div>
+          <div class="feature-desc">Curator agent + live search turns your goal into a shortlist of real forms to complete</div>
         </div>
       </div>
       <div class="feature-item reveal reveal-delay-4">
         <div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z"/></svg></div>
         <div>
-          <div class="feature-name">Agentic Action Loop</div>
-          <div class="feature-desc">AG2 multi-agent backend plans, executes, and verifies each step</div>
+          <div class="feature-name">Parallel fill fleet</div>
+          <div class="feature-desc">Multiple tabs, multiple SSE-backed fill runs — batch scholarships or apps without serial clicking</div>
         </div>
       </div>
       <div class="feature-item reveal reveal-delay-5">
@@ -792,23 +792,23 @@ transition: opacity 0.6s ease, transform 0.6s ease;
   <div class="steps-row">
     <div class="step reveal reveal-delay-1">
       <div class="step-circle">01</div>
-      <div class="step-title">Scan</div>
-      <div class="step-body">Content script captures full DOM snapshot: fields, labels, buttons</div>
+      <div class="step-title">Discover</div>
+      <div class="step-body">Curator agent searches the web and ranks URLs that likely host real applications</div>
     </div>
     <div class="step reveal reveal-delay-2">
       <div class="step-circle">02</div>
-      <div class="step-title">Instruct</div>
-      <div class="step-body">You type a plain-language task in the popup overlay</div>
+      <div class="step-title">Parallelize</div>
+      <div class="step-body">Extension opens parallel tabs; each page gets a DOM snapshot for its Fill agent</div>
     </div>
     <div class="step reveal reveal-delay-3">
       <div class="step-circle">03</div>
       <div class="step-title">Plan</div>
-      <div class="step-body">AG2 agent reasons over the form structure and creates an action plan</div>
+      <div class="step-body">Per tab: AG2 planner proposes actions; reviewer approves before execution</div>
     </div>
     <div class="step reveal reveal-delay-4">
       <div class="step-circle">04</div>
       <div class="step-title">Execute</div>
-      <div class="step-body">Background script fires fills, clicks, and scrolls — live on your page</div>
+      <div class="step-body">Content scripts run fills, clicks, and scrolls across all active tabs concurrently</div>
     </div>
   </div>
   <div class="code-demo reveal reveal-delay-2">
