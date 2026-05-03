@@ -72,10 +72,10 @@ class PopupController {
     setConnected(connected) {
         if (connected) {
             this.statusDot.classList.add('connected');
-            this.statusText.textContent = 'Connected to AG2 Agent';
+            this.statusText.textContent = 'Connected to FillNinja backend';
         } else {
             this.statusDot.classList.remove('connected');
-            this.statusText.textContent = 'Disconnected - Start backend server';
+            this.statusText.textContent = 'Disconnected — start the Python server';
         }
     }
 

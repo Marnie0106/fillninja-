@@ -72,7 +72,7 @@ class BackgroundController {
         if (!this.isConnected) {
             sendResponse({
                 success: false,
-                error: 'AG2 backend not connected. Please start the Python server.'
+                error: 'FillNinja backend not connected. Start the API server (uvicorn).'
             });
             return;
         }

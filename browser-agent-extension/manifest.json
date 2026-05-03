@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AG2 Browser Agent",
-  "version": "1.0.0",
-  "description": "AI-powered browser automation using AG2 - navigate, extract data, and interact with websites autonomously",
+  "name": "FillNinja Agent",
+  "version": "1.0.1",
+  "description": "FillNinja: AI-planned form fill and browser actions via local FastAPI agent",
   "permissions": [
     "activeTab",
     "scripting",
@@ -30,12 +30,6 @@
       "matches": ["<all_urls>"],
       "js": ["content.js"],
       "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["injected.js"],
-      "matches": ["<all_urls>"]
     }
   ],
   "icons": {
