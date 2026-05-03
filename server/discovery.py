@@ -1,5 +1,7 @@
+import asyncio
 import logging
-from typing import Any
+import os
+from typing import Any, Literal
 
 from ddgs import DDGS
 from pydantic import BaseModel, Field, ValidationError
@@ -7,6 +9,11 @@ from pydantic import BaseModel, Field, ValidationError
 from autogen.beta import Agent, PromptedSchema
 
 from server.llm import build_llm_config
+
+try:
+    from tavily import AsyncTavilyClient
+except ImportError:
+    AsyncTavilyClient = None
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +25,7 @@ Avoid: generic homepages with no form path, pure news, social timelines, obvious
 
 Each item must include fill_task: a concrete instruction for the Fill agents (e.g. fill visible fields with plausible demo data and the user's stated intent; do not submit if the user asked for dry-run).
 
-Your answer must match the JSON schema exactly."""
+Return one JSON object only: no markdown, no code fences, no text before or after."""
 
 MAX_SNIPPET_CHARS = 22000
 MAX_RAW_RESULTS = 80
@@ -36,12 +43,65 @@ class DiscoveryResult(BaseModel):
     forms: list[DiscoveredForm] = Field(default_factory=list)
 
 
-def collect_search_snippets(objective: str, max_per_query: int = 8) -> str:
-    queries = [
-        f"{objective} apply online application",
-        f"{objective} application form register",
-        f"{objective} scholarship grant fellowship apply",
+def _strip_json_markdown_fence(text: str) -> str:
+    s = text.strip()
+    start = s.find("```")
+    if start < 0:
+        return s
+    fragment = s[start:]
+    lines = fragment.splitlines()
+    if not lines:
+        return s
+    body: list[str] = []
+    for line in lines[1:]:
+        if line.strip() == "```":
+            break
+        body.append(line)
+    inner = "\n".join(body).strip()
+    return inner if inner else s
+
+
+def resolve_search_backend() -> Literal["tavily", "ddgs"]:
+    mode = os.environ.get("FILLNINJA_SEARCH", "auto").strip().lower()
+    if mode not in ("auto", "tavily", "ddgs"):
+        mode = "auto"
+    if mode == "tavily":
+        return "tavily"
+    if mode == "ddgs":
+        return "ddgs"
+    key = os.environ.get("TAVILY_API_KEY", "").strip()
+    return "tavily" if key else "ddgs"
+
+
+def discovery_search_health_detail() -> dict[str, str]:
+    backend = resolve_search_backend()
+    if backend == "tavily":
+        desc = "Tavily Search (live web) + AG2 curator agent"
+    else:
+        desc = "ddgs (DuckDuckGo) + AG2 curator agent"
+    return {"backend": backend, "description": desc}
+
+
+def _discovery_queries(objective: str) -> list[str]:
+    o = objective.strip()
+    return [
+        f"{o} apply online application",
+        f"{o} application form register",
+        f"{o} scholarship grant fellowship apply",
     ]
+
+
+def _format_snippet_chunks(chunks: list[str]) -> str:
+    if not chunks:
+        return "No search results returned. Broaden the objective or check network."
+    text = "\n\n---\n\n".join(chunks)
+    if len(text) > MAX_SNIPPET_CHARS:
+        return text[:MAX_SNIPPET_CHARS] + "\n... [truncated]"
+    return text
+
+
+def collect_search_snippets_ddgs(objective: str, max_per_query: int = 8) -> str:
+    queries = _discovery_queries(objective)
     chunks: list[str] = []
     seen_urls: set[str] = set()
     with DDGS() as ddgs:
@@ -63,12 +123,77 @@ def collect_search_snippets(objective: str, max_per_query: int = 8) -> str:
                 logger.warning("ddgs query failed %s: %s", q, e)
             if len(chunks) >= MAX_RAW_RESULTS:
                 break
-    if not chunks:
-        return "No search results returned. Broaden the objective or check network."
-    text = "\n\n---\n\n".join(chunks)
-    if len(text) > MAX_SNIPPET_CHARS:
-        return text[:MAX_SNIPPET_CHARS] + "\n... [truncated]"
-    return text
+    return _format_snippet_chunks(chunks)
+
+
+def _tavily_results_list(resp: Any) -> list[dict[str, Any]]:
+    if isinstance(resp, dict):
+        raw = resp.get("results") or []
+    else:
+        raw = getattr(resp, "results", None) or []
+    out: list[dict[str, Any]] = []
+    for item in raw:
+        if isinstance(item, dict):
+            out.append(item)
+        else:
+            out.append(
+                {
+                    "url": getattr(item, "url", "") or "",
+                    "title": getattr(item, "title", "") or "",
+                    "content": getattr(item, "content", "") or "",
+                }
+            )
+    return out
+
+
+async def collect_search_snippets_tavily(objective: str, max_per_query: int = 8) -> str:
+    if AsyncTavilyClient is None:
+        raise RuntimeError(
+            "Tavily search requires the tavily-python package. Install dependencies (pip install -r requirements.txt)."
+        )
+    api_key = os.environ.get("TAVILY_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("TAVILY_API_KEY is not set")
+
+    client = AsyncTavilyClient(api_key)
+    queries = _discovery_queries(objective)
+    chunks: list[str] = []
+    seen_urls: set[str] = set()
+    per_query = min(max(max_per_query, 1), 20)
+
+    for q in queries:
+        try:
+            resp = await client.search(
+                q,
+                max_results=per_query,
+                search_depth="basic",
+            )
+        except Exception as e:
+            logger.warning("tavily query failed %s: %s", q, e)
+            continue
+        for r in _tavily_results_list(resp):
+            href = (r.get("url") or "").strip()
+            if not href.startswith("http"):
+                continue
+            if href in seen_urls:
+                continue
+            seen_urls.add(href)
+            title = str(r.get("title") or "")
+            body = str(r.get("content") or "")[:400]
+            chunks.append(f"title: {title}\nurl: {href}\n{body}")
+            if len(chunks) >= MAX_RAW_RESULTS:
+                break
+        if len(chunks) >= MAX_RAW_RESULTS:
+            break
+
+    return _format_snippet_chunks(chunks)
+
+
+async def collect_search_snippets(objective: str, max_per_query: int = 8) -> str:
+    backend = resolve_search_backend()
+    if backend == "tavily":
+        return await collect_search_snippets_tavily(objective, max_per_query)
+    return await asyncio.to_thread(collect_search_snippets_ddgs, objective, max_per_query)
 
 
 def build_curator_agent(config: Any) -> Agent:
@@ -85,7 +210,16 @@ async def run_discovery(objective: str, max_forms: int) -> DiscoveryResult:
         max_forms = 1
     max_forms = min(max_forms, 20)
 
-    snippets = collect_search_snippets(objective.strip())
+    backend = resolve_search_backend()
+    if backend == "tavily":
+        if not os.environ.get("TAVILY_API_KEY", "").strip():
+            raise RuntimeError("TAVILY_API_KEY is required for Tavily search (or set FILLNINJA_SEARCH=ddgs).")
+        if AsyncTavilyClient is None:
+            raise RuntimeError(
+                "Tavily search requires tavily-python. Install dependencies (pip install -r requirements.txt)."
+            )
+
+    snippets = await collect_search_snippets(objective.strip())
     config = build_llm_config()
     curator = build_curator_agent(config)
     user_msg = (
@@ -97,7 +231,13 @@ async def run_discovery(objective: str, max_forms: int) -> DiscoveryResult:
     try:
         parsed = await reply.content()
     except ValidationError:
-        raise
+        raw = reply.body
+        if raw is None or not raw.strip():
+            raise
+        try:
+            parsed = DiscoveryResult.model_validate_json(_strip_json_markdown_fence(raw))
+        except ValidationError:
+            parsed = DiscoveryResult.model_validate_json(raw.strip())
     if parsed is None:
         raise RuntimeError("Curator returned empty content")
     forms = list(parsed.forms)[:max_forms]

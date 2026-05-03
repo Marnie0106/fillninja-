@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, ValidationError
 from autogen.beta import Agent, PromptedSchema
 from autogen.beta.config import OpenAIConfig
 
-from server.discovery import run_discovery
+from server.discovery import discovery_search_health_detail, run_discovery
 from server.llm import build_llm_config
 
 logger = logging.getLogger(__name__)
@@ -342,7 +342,7 @@ async def health() -> dict[str, Any]:
         "status": "ok",
         "pipeline": {
             "discover": "POST /pipeline/discover",
-            "search": "ddgs (DuckDuckGo) + AG2 curator agent",
+            "search": discovery_search_health_detail(),
         },
         "ag2": {
             "planner": "autogen.beta.Agent + PromptedSchema(PlannerOutput)",
@@ -368,7 +368,10 @@ async def pipeline_discover(body: DiscoverRequest) -> dict[str, Any]:
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        msg = str(e)
+        if "TAVILY_API_KEY" in msg or "tavily-python" in msg.lower():
+            raise HTTPException(status_code=503, detail=msg) from e
+        raise HTTPException(status_code=500, detail=msg) from e
     return result.model_dump()
 
 

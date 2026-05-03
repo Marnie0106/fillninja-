@@ -2,7 +2,7 @@
 
 Browser extension (Manifest V3) plus a **local FastAPI service** with an **[AG2](https://github.com/ag2ai/ag2) multi-agent** pipeline:
 
-- **Search Curator** — `ddgs` (DuckDuckGo) live search + `PromptedSchema(DiscoveryResult)` to shortlist real application pages.
+- **Search Curator** — **Tavily** (live web; [free API key](https://app.tavily.com)) when `TAVILY_API_KEY` is set, otherwise **`ddgs`** (DuckDuckGo), then `PromptedSchema(DiscoveryResult)` to shortlist real application pages. Override with `FILLNINJA_SEARCH=auto|tavily|ddgs`.
 - **Fill agents** (per tab) — planner + optional reviewer, with **parallel runs** across tabs.
 
 ## Prerequisites
@@ -60,7 +60,7 @@ The extension uses `http://localhost:8000` by default (same machine).
 |------|---------|
 | `browser-agent-extension/` | Chrome extension (popup, service worker, content script). |
 | `server/main.py` | FastAPI: `/agent/*`, `/pipeline/discover`, fill loop (planner + reviewer). |
-| `server/discovery.py` | `ddgs` search + AG2 curator (`PromptedSchema(DiscoveryResult)`). |
+| `server/discovery.py` | Tavily or `ddgs` search + AG2 curator (`PromptedSchema(DiscoveryResult)`). |
 | `server/llm.py` | Shared `OpenAIConfig` for OpenRouter. |
 | `fillninja-pitch-deck.html` | Single-file pitch deck. |
 | `scripts/generate_icons.py` | Optional: regenerate `icons/*.png` with Pillow. |
