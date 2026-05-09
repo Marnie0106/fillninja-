@@ -77,7 +77,6 @@ def _discovery_queries(objective: str) -> list[str]:
 
 
 def merged_search_queries(objective: str, extra: list[str] | None, max_queries: int = 6) -> list[str]:
-    """Combine templated objective queries with optional model-suggested phrases (deduplicated)."""
     base = _discovery_queries(objective)
     if not extra:
         return base[:max_queries]
@@ -128,26 +127,6 @@ def collect_search_snippets_ddgs(queries: list[str], max_per_query: int = 8) -> 
     return _format_snippet_chunks(chunks)
 
 
-def _tavily_results_list(resp: Any) -> list[dict[str, Any]]:
-    if isinstance(resp, dict):
-        raw = resp.get("results") or []
-    else:
-        raw = getattr(resp, "results", None) or []
-    out: list[dict[str, Any]] = []
-    for item in raw:
-        if isinstance(item, dict):
-            out.append(item)
-        else:
-            out.append(
-                {
-                    "url": getattr(item, "url", "") or "",
-                    "title": getattr(item, "title", "") or "",
-                    "content": getattr(item, "content", "") or "",
-                }
-            )
-    return out
-
-
 async def collect_search_snippets_tavily(queries: list[str], max_per_query: int = 8) -> str:
     if AsyncTavilyClient is None:
         raise RuntimeError(
@@ -156,37 +135,28 @@ async def collect_search_snippets_tavily(queries: list[str], max_per_query: int 
     api_key = os.environ.get("TAVILY_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("TAVILY_API_KEY is not set")
-
     client = AsyncTavilyClient(api_key)
     chunks: list[str] = []
     seen_urls: set[str] = set()
     per_query = min(max(max_per_query, 1), 20)
-
     for q in queries:
         try:
-            resp = await client.search(
-                q,
-                max_results=per_query,
-                search_depth="basic",
-            )
+            resp = await client.search(q, max_results=per_query, search_depth="basic")
         except Exception as e:
             logger.warning("tavily query failed %s: %s", q, e)
             continue
-        for r in _tavily_results_list(resp):
-            href = (r.get("url") or "").strip()
-            if not href.startswith("http"):
-                continue
-            if href in seen_urls:
+        for r in (resp.get("results", []) if isinstance(resp, dict) else getattr(resp, "results", [])):
+            href = (r.get("url", "") if isinstance(r, dict) else getattr(r, "url", "")).strip()
+            if not href.startswith("http") or href in seen_urls:
                 continue
             seen_urls.add(href)
-            title = str(r.get("title") or "")
-            body = str(r.get("content") or "")[:400]
+            title = str(r.get("title", "") if isinstance(r, dict) else getattr(r, "title", ""))
+            body = str(r.get("content", "") if isinstance(r, dict) else getattr(r, "content", ""))[:400]
             chunks.append(f"title: {title}\nurl: {href}\n{body}")
             if len(chunks) >= MAX_RAW_RESULTS:
                 break
         if len(chunks) >= MAX_RAW_RESULTS:
             break
-
     return _format_snippet_chunks(chunks)
 
 
@@ -206,45 +176,27 @@ def build_curator_agent(config: Any) -> Agent:
     )
 
 
-async def run_discovery(
-    objective: str,
-    max_forms: int,
-    extra_search_queries: list[str] | None = None,
-) -> DiscoveryResult:
-    if max_forms < 1:
-        max_forms = 1
-    max_forms = min(max_forms, 20)
-
-    backend = resolve_search_backend()
-    if backend == "tavily":
-        if not os.environ.get("TAVILY_API_KEY", "").strip():
-            raise RuntimeError("TAVILY_API_KEY is required for Tavily search (or set FILLNINJA_SEARCH=ddgs).")
-        if AsyncTavilyClient is None:
-            raise RuntimeError(
-                "Tavily search requires tavily-python. Install dependencies (pip install -r requirements.txt)."
-            )
-
-    queries = merged_search_queries(objective.strip(), extra_search_queries)
+async def run_curator(objective: str, extra_queries: list[str] | None = None) -> DiscoveryResult:
+    queries = merged_search_queries(objective, extra_queries)
     snippets = await collect_search_snippets(queries)
     config = build_llm_config()
-    curator = build_curator_agent(config)
-    user_msg = (
-        f"User objective:\n{objective.strip()}\n\n"
-        f"Return at most {max_forms} forms.\n\n"
-        f"Search snippets:\n{snippets}"
-    )
-    reply = await curator.ask(user_msg)
-    try:
-        parsed = await reply.content()
-    except ValidationError:
-        raw = reply.body
-        if raw is None or not raw.strip():
-            raise
-        try:
-            parsed = DiscoveryResult.model_validate_json(strip_markdown_json_fence(raw))
-        except ValidationError:
-            parsed = DiscoveryResult.model_validate_json(raw.strip())
-    if parsed is None:
-        raise RuntimeError("Curator returned empty content")
-    forms = list(parsed.forms)[:max_forms]
-    return DiscoveryResult(summary=parsed.summary, forms=forms)
+    agent = build_curator_agent(config)
+    user_msg = f"Objective: {objective}\n\nSearch snippets:\n{snippets}"
+    reply = await agent.ask(user_msg)
+    raw = await reply.content()
+    if isinstance(raw, DiscoveryResult):
+        return raw
+    if isinstance(raw, str):
+        return DiscoveryResult.model_validate_json(strip_markdown_json_fence(raw))
+    return DiscoveryResult()
+
+
+async def run_discovery(objective: str, max_forms: int = 8, extra_queries: list[str] | None = None) -> dict:
+    result = await run_curator(objective, extra_queries)
+    trimmed = result.forms[:max_forms]
+    return {
+        "summary": result.summary,
+        "forms": [f.model_dump() for f in trimmed],
+        "total": len(result.forms),
+        "returned": len(trimmed),
+    }
